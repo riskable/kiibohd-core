@@ -21,23 +21,25 @@ time = { NUMBER ~ ("s" | "ms" | "us") }
 
 key_state = { "P" | "UP" | "UR" | "R" | "H" | "O" }
 state = { "On" | "D" | "Off" }
-trigger_type = { "A" | "T" | "Layer" | "LayerShift" | "LayerLatch" | "LayerLock" }
+layer_type = { "Layer" | "LayerShift" | "LayerLatch" | "LayerLock" }
 charcode = { "'" ~ char ~ "'" }
 scancode = { "S" ~ (range | id) }
 usbcode = { "U" ~ (range | id) }
 consumer = { "CON" ~ id }
 system = { "SYS" ~ id }
 indicator = { "I" ~ id }
-layer = { word ~ "[" ~ id ~ "]" }
-key = { scancode | usbcode }
+layer = { layer_type ~ "[" ~ number ~ "]" }
+trig = { "T[" ~ number ~ "," ~ number ~ "]" }
+key = _{ scancode | usbcode }
 
 kv = { word ~ (":" ~ word)? }
 kvmap = { kv ~ ("," ~ kv)* }
 
-array = { "[" ~ NUMBER? ~ "]" }
+index = { NUMBER? }
+array = { name ~ "[" ~ index ~ "]" }
 function = { name ~ "(" ~ kvmap? ~ ")" }
 
-lhs = { name ~ array? | string }
+lhs = _{ array | name | string }
 property = { lhs ~ "=" ~ value ~ ";" }
 define = { name ~ "=>" ~ value ~ ";" }
 capability = { name ~ "=>" ~ function ~ ";" }
@@ -46,13 +48,14 @@ position = { pixel ~ "<=" ~ kvmap ~ ";" }
 timing = { key_state ~ (":" ~ time)? }
 timings = { timing ~ ("," ~ timing)* }
 
-key_trigger = { key | key ~  ("(" ~ (timings | NUMBER) ~ ")") }
-combo = { key ~ ("+" ~ key)* }
-sequence = { combo ~ ("," ~ combo)* }
+key_trigger = { key ~ ("(" ~ (timings | NUMBER) ~ ")") | key }
+combo = _{ key_trigger ~ ("+" ~ key_trigger)+ }
+sequence = _{ (combo | key_trigger) ~ ("," ~ (combo | key_trigger))+ }
 
 indicator_trigger = { indicator | indicator ~  ("(" ~ state ~ ")") }
-generic_trigger = { trigger_type | trigger_type ~  ("(" ~ state ~ ")") }
-trigger = { sequence | indicator_trigger | generic_trigger | animation }
+layer_trigger = { layer | layer ~ ("(" ~ state ~ ")") }
+generic_trigger = { trig | trig ~ ("(" ~ state ~ ")") }
+trigger = { sequence | combo | key_trigger | layer_trigger | indicator_trigger | generic_trigger | animation }
 
 
 result = { sequence | usbcode | consumer | system | generic_trigger | function | color | "None" }
@@ -61,7 +64,7 @@ result = { sequence | usbcode | consumer | system | generic_trigger | function |
 binding = { ":" | "::" | ":+" | ":-" | "i:" | "i::" | "i:+" | "i:-" }
 mapping = { trigger ~ binding ~ result ~ ";" }
 
-pixel = { "P[" ~ kvmap ~ "]" }
+pixel = _{ "P[" ~ number ~ "]" }
 pixeldef = { pixel ~ "(" ~ kvmap ~ ")" }
 pixelmap = { pixeldef ~ ":" ~ (scancode | "None") ~ ";" }
 
@@ -71,7 +74,7 @@ animdef = { animation ~ "<=" ~ kvmap ~ ";" }
 op = { "+" | "-" | "+:" | "-:" | "<<" | ">>" }
 channel = { op? ~ number }
 channels = { channel ~ ("," ~ channel)* }
-color = { pixel ~ "(" ~ channels ~ ")" }
+color = { "P[" ~ kvmap ~ "](" ~ channels ~ ")" }
 colors = { color ~ ("," ~ color)* }
 
 frame = { "A[" ~ name ~ "," ~ number ~ "]" }
