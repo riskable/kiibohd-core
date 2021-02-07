@@ -1,6 +1,7 @@
+use pest::iterators::Pair;
 use pest::Parser;
 use pest_derive::Parser;
-//use std::collections::HashMap;
+use std::collections::HashMap;
 
 type PestError = pest::error::Error<Rule>;
 
@@ -26,6 +27,7 @@ pub enum Statement<'a> {
     Pixelmap((usize, PixelDef)),
     Animation((&'a str, Animation<'a>)),
     Frame((&'a str, usize, Pixel)),
+    NOP,
 }
 
 use std::fmt;
@@ -65,6 +67,7 @@ impl<'a> fmt::Display for Statement<'a> {
                 write!(f, "A[{}] <= {};", name, anim.modifiers.join(", "))
             }
             Self::Frame((name, index, frame)) => write!(f, "A[{}, {}] <= {};", name, index, frame),
+            Self::NOP => Ok(()),
         }
     }
 }
@@ -507,21 +510,25 @@ impl fmt::Display for PixelColor {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct KllState<'a> {
-    /*defines: HashMap<&'a str, &'a str>,
-    variables: HashMap<&'a str, Variable<'a>>,
-    capabilities: HashMap<&'a str, Capability<'a>>,
-    keymap: Vec<Mapping<'a>>,
-    positions: HashMap<usize, Position>,
-    pixelmap: HashMap<usize, PixelDef>,
-    animations: HashMap<&'a str, Animation<'a>>,*/
+pub struct KllFile<'a> {
     pub statements: Vec<Statement<'a>>,
 }
 
-impl<'a> fmt::Display for KllState<'a> {
+#[derive(Debug, Default, Clone)]
+pub struct KllState<'a> {
+    defines: HashMap<&'a str, &'a str>,
+    variables: HashMap<&'a str, Variable<'a>>,
+    capabilities: HashMap<&'a str, Capability<'a>>,
+    keymap: Vec<(Trigger<'a>, TriggerVarient, Action<'a>)>,
+    positions: HashMap<usize, Position>,
+    pixelmap: HashMap<usize, PixelDef>,
+    animations: HashMap<&'a str, Animation<'a>>,
+}
+
+impl<'a> fmt::Display for KllFile<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for statement in &self.statements {
-            write!(f, "{}\n", statement)?;
+            writeln!(f, "{}", statement)?;
         }
         Ok(())
     }
@@ -536,295 +543,381 @@ fn parse_int(s: &str) -> usize {
     }
 }
 
-impl KllState<'_> {
-    fn from_str(text: &str) -> Result<KllState, PestError> {
+fn parse_array<'a>(lhs: Pair<'a, Rule>, rhs: &'a str) -> Statement<'a> {
+    let mut inner = lhs.into_inner();
+    let name = inner.next().unwrap().as_str();
+    let index = inner.next().unwrap().as_str().parse::<usize>().unwrap();
+    let value = Variable::Array(index, rhs);
+    Statement::Variable((name, value))
+}
+
+fn parse_variable<'a>(lhs: Pair<'a, Rule>, rhs: &'a str) -> Statement<'a> {
+    let name = lhs.as_str().trim_matches('"');
+    let value = Variable::String(rhs);
+    Statement::Variable((name, value))
+}
+
+fn parse_property(line: Pair<Rule>) -> Statement {
+    let mut parts = line.into_inner();
+    let lhs = parts.next().unwrap();
+    let rhs = parts.next().unwrap().as_str().trim_matches('"');
+
+    match lhs.as_rule() {
+        Rule::array => parse_array(lhs, rhs),
+        Rule::string => parse_variable(lhs, rhs),
+        _ => unreachable!(),
+    }
+}
+
+fn parse_define(line: Pair<Rule>) -> Statement {
+    let mut parts = line.into_inner();
+    let name = parts.next().unwrap().as_str();
+    let value = parts.next().unwrap().as_str();
+    Statement::Define((name, value))
+}
+
+fn parse_fn(element: Pair<Rule>) -> Capability {
+    let mut parts = element.into_inner();
+    let fun = parts.next().unwrap();
+    let args = parts.next().unwrap();
+
+    Capability {
+        function: fun.as_str(),
+        args: parse_args(args),
+    }
+}
+
+fn parse_args(element: Pair<Rule>) -> Vec<&str> {
+    let args = element.into_inner();
+
+    let mut result = vec![];
+    for item in args {
+        result.push(item.as_str());
+    }
+    result
+}
+
+fn parse_capability(line: Pair<Rule>) -> Statement {
+    let mut parts = line.into_inner();
+    let name = parts.next().unwrap().as_str();
+    let rhs = parts.next().unwrap();
+
+    let cap = parse_fn(rhs);
+    Statement::Capability((name, cap))
+}
+
+fn parse_mode(mode: Pair<Rule>) -> TriggerVarient {
+    match mode.as_str() {
+        ":" => TriggerVarient::Replace,
+        "::" => TriggerVarient::SoftReplace,
+        ":+" => TriggerVarient::Add,
+        ":-" => TriggerVarient::Remove,
+        "i:" => TriggerVarient::IsolateReplace,
+        "i::" => TriggerVarient::IsolateSoftReplace,
+        "i:+" => TriggerVarient::IsolateAdd,
+        "i:-" => TriggerVarient::IsolateRemove,
+        _ => unreachable!(),
+    }
+}
+
+fn parse_trigger(lhs: Pair<Rule>) -> Trigger {
+    let text = lhs.as_str();
+    let trigger = lhs.into_inner().next().unwrap();
+    match trigger.as_rule() {
+        Rule::key_trigger => {
+            let scancode = text.strip_prefix("S").unwrap();
+            let key = Key::Scancode(parse_int(scancode));
+            let trigger = KeyTrigger {
+                keys: KeyGroup::Single(key),
+                press_state: None,
+                analog_state: None,
+            };
+            Trigger::Key(trigger)
+        }
+        _ => unimplemented!(),
+    }
+}
+
+fn parse_scancode(text: &str) -> usize {
+    text.strip_prefix("S").unwrap().parse::<usize>().unwrap()
+}
+
+fn parse_usb(text: &str) -> KeyTrigger {
+    let usbcode = text.strip_prefix("U").unwrap();
+    let key = Key::Usb(usbcode);
+    KeyTrigger {
+        keys: KeyGroup::Single(key),
+        press_state: None,
+        analog_state: None,
+    }
+}
+
+fn parse_consumer(text: &str) -> KeyTrigger {
+    let code = text.strip_prefix("CON").unwrap();
+    let key = Key::Consumer(code);
+    KeyTrigger {
+        keys: KeyGroup::Single(key),
+        press_state: None,
+        analog_state: None,
+    }
+}
+
+fn parse_system(text: &str) -> KeyTrigger {
+    let code = text.strip_prefix("Sys").unwrap();
+    let key = Key::System(code);
+    KeyTrigger {
+        keys: KeyGroup::Single(key),
+        press_state: None,
+        analog_state: None,
+    }
+}
+
+fn parse_channels(channels: Pair<Rule>) -> Vec<PixelColor> {
+    let mut values = vec![];
+    for c in channels.into_inner() {
+        let color = c.as_str();
+        let value = match &color[0..1] {
+            "+" | "-" => PixelColor::Relative(color.parse::<isize>().unwrap()),
+            _ => PixelColor::Rgb(parse_int(color)),
+        };
+        values.push(value);
+    }
+    values
+}
+
+fn parse_pixel(element: Pair<Rule>) -> Pixel {
+    let mut parts = element.into_inner();
+    let index = parts.next().unwrap().as_str();
+    let channels = parts.next().unwrap();
+
+    Pixel {
+        range: PixelRange {
+            index: Some(PixelAddr::Absolute(parse_int(index))),
+            row: None,
+            col: None,
+        },
+        channel_values: parse_channels(channels),
+    }
+}
+
+fn parse_result(rhs: Pair<Rule>) -> Action {
+    let text = rhs.as_str();
+    let result = rhs.into_inner().next().unwrap();
+    match dbg!(result.as_rule()) {
+        Rule::usbcode => Action::Output(parse_usb(text)),
+        Rule::consumer => Action::Output(parse_consumer(text)),
+        Rule::system => Action::Output(parse_system(text)),
+        Rule::color => Action::Pixel(parse_pixel(result)),
+        _ => unimplemented!(),
+    }
+}
+
+fn parse_mapping(line: Pair<Rule>) -> Statement {
+    let mut parts = line.into_inner();
+    let lhs = parts.next().unwrap();
+    let assignment = parts.next().unwrap();
+    let rhs = parts.next().unwrap();
+
+    let trigger = parse_trigger(lhs);
+    let mode = parse_mode(assignment);
+    let result = parse_result(rhs);
+
+    Statement::Keymap((trigger, mode, result))
+}
+
+fn parse_kv(kv: Pair<Rule>) -> (&str, &str) {
+    let mut parts = kv.into_inner();
+    let k = parts.next().unwrap().as_str();
+    let v = parts.next().unwrap().as_str();
+    (k, v)
+}
+
+fn parse_kvmap(element: Pair<Rule>) -> HashMap<&str, &str> {
+    let mut map = HashMap::new();
+    for kv in element.into_inner() {
+        let (k, v) = parse_kv(kv);
+        map.insert(k, v);
+    }
+
+    map
+}
+
+fn parse_list(element: Pair<Rule>) -> Vec<&str> {
+    let mut list = vec![];
+    for item in element.into_inner() {
+        list.push(item.as_str());
+    }
+
+    list
+}
+
+fn parse_position(line: Pair<Rule>) -> Statement {
+    let mut parts = line.into_inner();
+    let index = parts.next().unwrap().as_str();
+    let map = parse_kvmap(parts.next().unwrap());
+
+    let mut pos = Position::default();
+    for (k, v) in map.iter() {
+        let v = v.parse::<usize>().unwrap();
+        match *k {
+            "x" => pos.x = v,
+            "y" => pos.y = v,
+            "z" => pos.z = v,
+            "rx" => pos.rx = v,
+            "ry" => pos.ry = v,
+            "rz" => pos.rz = v,
+            _ => {}
+        }
+    }
+
+    Statement::Position((parse_int(index), pos))
+}
+
+fn parse_pixelmap_left(lhs: Pair<Rule>) -> (usize, Vec<(usize, usize)>) {
+    let mut lhs = lhs.into_inner();
+    let index = parse_int(lhs.next().unwrap().as_str());
+
+    let channelmap = parse_kvmap(lhs.next().unwrap());
+    let channels = channelmap
+        .iter()
+        .map(|(k, v)| {
+            let k = k.parse::<usize>().unwrap();
+            let v = v.parse::<usize>().unwrap();
+            (k, v)
+        })
+        .collect::<Vec<_>>();
+
+    (index, channels)
+}
+
+fn parse_pixelmap(line: Pair<Rule>) -> Statement {
+    let mut parts = line.into_inner();
+    let lhs = parts.next().unwrap();
+    let rhs = parts.next().unwrap();
+
+    let (index, channels) = parse_pixelmap_left(lhs);
+    let scancode = parse_scancode(rhs.as_str());
+
+    let pixel = PixelDef {
+        scancode: Some(scancode),
+        channels,
+    };
+
+    Statement::Pixelmap((index, pixel))
+}
+
+fn parse_str(element: Pair<Rule>) -> &str {
+    let mut element = element.into_inner();
+    element.next().unwrap().as_str()
+}
+
+fn parse_animdef(line: Pair<Rule>) -> Statement {
+    let mut parts = line.into_inner();
+    let lhs = parts.next().unwrap();
+    let rhs = parts.next().unwrap();
+
+    let name = parse_str(lhs);
+    let animation = Animation {
+        modifiers: parse_list(rhs),
+        frames: vec![],
+    };
+
+    Statement::Animation((name, animation))
+}
+
+fn parse_anim_left(element: Pair<Rule>) -> (&str, usize) {
+    let mut parts = element.into_inner();
+    let name = parts.next().unwrap().as_str();
+    let index = parts.next().unwrap().as_str().parse::<usize>().unwrap();
+    (name, index)
+}
+
+fn parse_anim_right(elements: Pair<Rule>) -> Pixel {
+    let mut parts = elements.into_inner();
+    let pixel = parts.next().unwrap();
+    parse_pixel(pixel)
+}
+
+fn parse_animframe(line: Pair<Rule>) -> Statement {
+    let mut parts = line.into_inner();
+    let lhs = parts.next().unwrap();
+    let rhs = parts.next().unwrap();
+
+    let (name, index) = parse_anim_left(lhs);
+    let pixel = parse_anim_right(rhs);
+    Statement::Frame((name, index, pixel))
+}
+
+fn parse_statement(line: Pair<Rule>) -> Statement {
+    match line.as_rule() {
+        Rule::property => parse_property(line),
+        Rule::define => parse_define(line),
+        Rule::capability => parse_capability(line),
+        Rule::mapping => parse_mapping(line),
+        Rule::position => parse_position(line),
+        Rule::pixelmap => parse_pixelmap(line),
+        Rule::animdef => parse_animdef(line),
+        Rule::animframe => parse_animframe(line),
+        Rule::EOI => Statement::NOP,
+        _ => unreachable!(),
+    }
+}
+
+impl<'a> KllFile<'a> {
+    fn from_str(text: &str) -> Result<KllFile, PestError> {
+        let mut kll = KllFile::default();
+
         let file = KLLParser::parse(Rule::file, text)?;
-
-        let mut kll = KllState::default();
-
         for line in file {
-            match line.as_rule() {
-                Rule::property => {
-                    let mut parts = line.into_inner();
-                    let lhs = parts.next().unwrap();
-                    let value = parts.next().unwrap().as_str().trim_matches('"');
-                    //println!("SET '{}' to '{}'", lhs, value);
-
-                    match lhs.as_rule() {
-                        Rule::array => {
-                            let mut inner = lhs.into_inner();
-                            let name = inner.next().unwrap().as_str();
-                            let index = inner.next().unwrap().as_str().parse::<usize>().unwrap();
-                            /*let var = kll
-                                .variables
-                                .entry(name)
-                                .or_insert_with(|| Variable::List(vec![]));
-                            if let Variable::List(list) = var {
-                                if list.len() <= index {
-                                    list.resize(index + 1, "");
-                                }
-                                list[index] = value;
-                            }*/
-                            let value = Variable::Array(index, value);
-                            kll.statements.push(Statement::Variable((name, value)));
-                        }
-                        Rule::string => {
-                            let name = lhs.as_str().trim_matches('"');
-                            let value = Variable::String(value);
-                            //kll.variables.insert(name, value);
-                            kll.statements.push(Statement::Variable((name, value)));
-                        }
-                        _ => unreachable!(),
-                    };
-                }
-                Rule::define => {
-                    let mut parts = line.into_inner();
-                    let name = parts.next().unwrap().as_str();
-                    let value = parts.next().unwrap().as_str();
-                    //println!("DEFINE '{}' to '{}'", name, value);
-                    //kll.defines.insert(name, value);
-                    kll.statements.push(Statement::Define((name, value)));
-                }
-                Rule::capability => {
-                    let mut parts = line.into_inner();
-                    let name = parts.next().unwrap().as_str();
-                    let mut rhs = parts.next().unwrap().into_inner();
-
-                    let mut cap = Capability {
-                        function: rhs.next().unwrap().as_str(),
-                        ..Default::default()
-                    };
-
-                    let args = rhs.next().unwrap().into_inner();
-                    for item in args {
-                        cap.args.push(item.as_str());
-                    }
-
-                    //println!("CAP '{}' -> '{}'", name, value);
-                    //kll.capabilities.insert(name, cap);
-                    kll.statements.push(Statement::Capability((name, cap)));
-                }
-                Rule::mapping => {
-                    let mut parts = line.into_inner();
-                    let lhs = parts.next().unwrap();
-                    let assignment = parts.next().unwrap().as_str();
-                    let rhs = parts.next().unwrap();
-
-                    let mode = match assignment {
-                        ":" => TriggerVarient::Replace,
-                        "::" => TriggerVarient::SoftReplace,
-                        ":+" => TriggerVarient::Add,
-                        ":-" => TriggerVarient::Remove,
-                        "i:" => TriggerVarient::IsolateReplace,
-                        "i::" => TriggerVarient::IsolateSoftReplace,
-                        "i:+" => TriggerVarient::IsolateAdd,
-                        "i:-" => TriggerVarient::IsolateRemove,
-                        _ => unreachable!(),
-                    };
-
-                    let text = lhs.as_str();
-                    let trigger = match lhs.into_inner().next().unwrap().as_rule() {
-                        Rule::key_trigger => {
-                            let scancode = text.strip_prefix("S").unwrap();
-                            let key = Key::Scancode(parse_int(scancode));
-                            let trigger = KeyTrigger {
-                                keys: KeyGroup::Single(key),
-                                press_state: None,
-                                analog_state: None,
-                            };
-                            Trigger::Key(trigger)
-                        }
-                        _ => unimplemented!(),
-                    };
-
-                    let text = rhs.as_str();
-                    let rhs = rhs.into_inner().next().unwrap();
-                    let result = match dbg!(rhs.as_rule()) {
-                        Rule::usbcode => {
-                            let usbcode = text.strip_prefix("U").unwrap();
-                            let key = Key::Usb(usbcode);
-                            let trigger = KeyTrigger {
-                                keys: KeyGroup::Single(key),
-                                press_state: None,
-                                analog_state: None,
-                            };
-                            Action::Output(trigger)
-                        }
-                        Rule::consumer => {
-                            let code = text.strip_prefix("CON").unwrap();
-                            let key = Key::Consumer(code);
-                            let trigger = KeyTrigger {
-                                keys: KeyGroup::Single(key),
-                                press_state: None,
-                                analog_state: None,
-                            };
-                            Action::Output(trigger)
-                        }
-                        Rule::system => {
-                            let code = text.strip_prefix("Sys").unwrap();
-                            let key = Key::System(code);
-                            let trigger = KeyTrigger {
-                                keys: KeyGroup::Single(key),
-                                press_state: None,
-                                analog_state: None,
-                            };
-                            Action::Output(trigger)
-                        }
-                        Rule::color => {
-                            let mut parts = rhs.into_inner();
-                            let index = parts.next().unwrap().as_str();
-                            let channels = parts.next().unwrap();
-
-                            let mut values = vec![];
-                            for c in channels.into_inner() {
-                                let color = c.as_str();
-                                let value = match &color[0..1] {
-                                    "+" | "-" => {
-                                        PixelColor::Relative(color.parse::<isize>().unwrap())
-                                    }
-                                    _ => PixelColor::Rgb(parse_int(color)),
-                                };
-                                values.push(value);
-                            }
-                            let pixel = Pixel {
-                                range: PixelRange {
-                                    index: Some(PixelAddr::Absolute(parse_int(index))),
-                                    ..Default::default()
-                                },
-                                channel_values: values,
-                            };
-
-                            Action::Pixel(pixel)
-                        }
-                        _ => unimplemented!(),
-                    };
-
-                    /*kll.keymap.push(Mapping {
-                        trigger,
-                        mode,
-                        result,
-                    });*/
-                    kll.statements
-                        .push(Statement::Keymap((trigger, mode, result)));
-                }
-                Rule::position => {
-                    let mut parts = line.into_inner();
-                    let index = parts.next().unwrap().as_str();
-
-                    let mut pos = Position::default();
-                    for kv in parts.next().unwrap().into_inner() {
-                        let mut parts = kv.into_inner();
-                        let k = parts.next().unwrap().as_str();
-                        let v = parts.next().unwrap().as_str().parse::<usize>().unwrap();
-                        match k {
-                            "x" => pos.x = v,
-                            "y" => pos.y = v,
-                            "z" => pos.z = v,
-                            "rx" => pos.rx = v,
-                            "ry" => pos.ry = v,
-                            "rz" => pos.rz = v,
-                            _ => {}
-                        }
-                    }
-                    //println!("POS '{}' -> '{}'", name, value);
-                    //kll.positions.insert(parse_int(index), pos);
-                    kll.statements
-                        .push(Statement::Position((parse_int(index), pos)));
-                }
-                Rule::pixelmap => {
-                    let mut parts = line.into_inner();
-                    let mut lhs = parts.next().unwrap().into_inner();
-                    let scancode = parts.next().unwrap().as_str();
-
-                    let index = parse_int(lhs.next().unwrap().as_str());
-                    let mut pixel = PixelDef {
-                        scancode: Some(
-                            scancode
-                                .strip_prefix("S")
-                                .unwrap()
-                                .parse::<usize>()
-                                .unwrap(),
-                        ),
-                        ..Default::default()
-                    };
-
-                    let channels = lhs.next().unwrap();
-                    for kv in channels.into_inner() {
-                        let mut parts = kv.into_inner();
-                        let k = parts.next().unwrap().as_str().parse::<usize>().unwrap();
-                        let v = parts.next().unwrap().as_str().parse::<usize>().unwrap();
-                        pixel.channels.push((k, v))
-                    }
-
-                    //println!("PIXEL '{}' -> '{}'", name, value);
-                    //kll.pixelmap.insert(index, pixel);
-                    kll.statements.push(Statement::Pixelmap((index, pixel)));
-                }
-                Rule::animdef => {
-                    let mut parts = line.into_inner();
-                    let mut lhs = parts.next().unwrap().into_inner();
-                    let rhs = parts.next().unwrap();
-
-                    let name = lhs.next().unwrap().as_str();
-
-                    let mut animation = Animation::default();
-                    for item in rhs.into_inner() {
-                        animation.modifiers.push(item.as_str());
-                    }
-
-                    //println!("New animation '{}' -> '{}'", name, value);
-                    //kll.animations.insert(name, animation);
-                    kll.statements.push(Statement::Animation((name, animation)));
-                }
-                Rule::animframe => {
-                    let mut parts = line.into_inner();
-                    let mut lhs = parts.next().unwrap().into_inner();
-                    let mut rhs = parts.next().unwrap().into_inner();
-
-                    let name = lhs.next().unwrap().as_str();
-                    let index = lhs.next().unwrap().as_str().parse::<usize>().unwrap();
-
-                    let mut rparts = rhs.next().unwrap().into_inner();
-                    let pos = rparts.next().unwrap().as_str();
-                    let channels = rparts.next().unwrap();
-
-                    let mut values = vec![];
-                    for c in channels.into_inner() {
-                        let color = c.as_str();
-                        let value = match &color[0..1] {
-                            "+" | "-" => PixelColor::Relative(color.parse::<isize>().unwrap()),
-                            _ => PixelColor::Rgb(parse_int(color)),
-                        };
-                        values.push(value);
-                    }
-                    let pixel = Pixel {
-                        range: PixelRange {
-                            index: Some(PixelAddr::Absolute(parse_int(pos))),
-                            ..Default::default()
-                        },
-                        channel_values: values,
-                    };
-
-                    //println!("New frame '{}' -> '{}'", name, value);
-                    /*let animation = kll.animations.entry(name).or_default();
-                    let frames = &mut animation.frames;
-                    if frames.len() <= index {
-                        frames.resize(index + 1, Pixel::default());
-                    }
-                    frames[index] = pixel;*/
-                    kll.statements.push(Statement::Frame((name, index, pixel)));
-                }
-                Rule::EOI => {}
-                _ => unreachable!(),
-            }
+            kll.statements.push(parse_statement(line));
         }
 
         Ok(kll)
     }
+
+    pub fn into_struct(self) -> KllState<'a> {
+        let mut kll = KllState::default();
+        for statement in self.statements {
+            match statement {
+                Statement::Define((name, val)) => {
+                    kll.defines.insert(name, val);
+                }
+                Statement::Variable((name, val)) => {
+                    kll.variables.insert(name, val);
+                }
+                Statement::Capability((name, cap)) => {
+                    kll.capabilities.insert(name, cap);
+                }
+                Statement::Keymap((trigger, varient, action)) => {
+                    kll.keymap.push((trigger, varient, action));
+                }
+                Statement::Position((index, pos)) => {
+                    kll.positions.insert(index, pos);
+                }
+                Statement::Pixelmap((index, map)) => {
+                    kll.pixelmap.insert(index, map);
+                }
+                Statement::Animation((name, anim)) => {
+                    kll.animations.insert(name, anim);
+                }
+                Statement::Frame((name, index, frame)) => {
+                    let animation = kll.animations.entry(name).or_default();
+                    let frames = &mut animation.frames;
+                    if frames.len() <= index {
+                        frames.resize(index + 1, Pixel::default());
+                    }
+                    frames[index] = frame;
+                }
+                Statement::NOP => {}
+            };
+        }
+
+        kll
+    }
 }
 
-pub fn parse(text: &str) -> Result<KllState, PestError> {
-    KllState::from_str(text)
+pub fn parse(text: &str) -> Result<KllFile, PestError> {
+    KllFile::from_str(text)
 }
 
 #[cfg(test)]
