@@ -1,13 +1,22 @@
-use pest::iterators::Pair;
-use pest::Parser;
-use pest_derive::Parser;
+use pest_consume::{match_nodes, Error, Parser};
 use std::collections::HashMap;
 
-type PestError = pest::error::Error<Rule>;
+type PestError = Error<Rule>;
+type Result<T> = std::result::Result<T, PestError>;
+type Node<'i> = pest_consume::Node<'i, Rule, ()>;
 
 #[derive(Parser)]
 #[grammar = "kll.pest"]
 pub struct KLLParser;
+
+fn parse_int(s: &str) -> usize {
+    //dbg!(s);
+    if s.starts_with("0x") {
+        usize::from_str_radix(s.trim_start_matches("0x"), 16).unwrap()
+    } else {
+        usize::from_str_radix(s, 10).unwrap()
+    }
+}
 
 pub fn maybe_quote(text: &str) -> String {
     if text.contains(' ') {
@@ -20,13 +29,13 @@ pub fn maybe_quote(text: &str) -> String {
 #[derive(Debug, Clone)]
 pub enum Statement<'a> {
     Define((&'a str, &'a str)),
-    Variable((&'a str, Variable<'a>)),
+    Variable((Variable<'a>, &'a str)),
     Capability((&'a str, Capability<'a>)),
     Keymap((Trigger<'a>, TriggerVarient, Action<'a>)),
     Position((usize, Position)),
     Pixelmap((usize, PixelDef)),
     Animation((&'a str, Animation<'a>)),
-    Frame((&'a str, usize, Pixel)),
+    Frame((&'a str, usize, Vec<Pixel>)),
     NOP,
 }
 
@@ -35,15 +44,17 @@ impl<'a> fmt::Display for Statement<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Define((name, val)) => write!(f, "{} = {};", name, maybe_quote(val)),
-            Self::Variable((name, val)) => match val {
-                Variable::Array(index, val) => write!(
+            Self::Variable((var, val)) => match var {
+                Variable::Array(name, index) => write!(
                     f,
                     "{}[{}] = {};",
                     maybe_quote(name),
                     index,
                     maybe_quote(val)
                 ),
-                Variable::String(val) => write!(f, "{} = {};", maybe_quote(name), maybe_quote(val)),
+                Variable::String(name) => {
+                    write!(f, "{} = {};", maybe_quote(name), maybe_quote(val))
+                }
             },
             Self::Capability((name, cap)) => write!(f, "{} = {};", name, cap),
             Self::Keymap((trigger, varient, action)) => {
@@ -66,15 +77,17 @@ impl<'a> fmt::Display for Statement<'a> {
             Self::Animation((name, anim)) => {
                 write!(f, "A[{}] <= {};", name, anim.modifiers.join(", "))
             }
-            Self::Frame((name, index, frame)) => write!(f, "A[{}, {}] <= {};", name, index, frame),
+            Self::Frame((name, index, frame)) => {
+                write!(f, "A[{}, {}] <= {:?};", name, index, frame)
+            }
             Self::NOP => Ok(()),
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Variable<'a> {
-    Array(usize, &'a str),
+    Array(&'a str, usize),
     String(&'a str),
 }
 
@@ -121,7 +134,7 @@ pub struct PixelDef {
 #[derive(Debug, Default, Clone)]
 pub struct Animation<'a> {
     modifiers: Vec<&'a str>,
-    frames: Vec<Pixel>,
+    frames: Vec<Vec<Pixel>>,
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Hash, Clone)]
@@ -363,6 +376,7 @@ pub enum Action<'a> {
     PixelLayer(Pixel),
     Capability((Capability<'a>, KeyState)),
     Other(&'a str),
+    NOP,
 }
 
 impl<'a> fmt::Display for Action<'a> {
@@ -375,6 +389,7 @@ impl<'a> fmt::Display for Action<'a> {
             Self::PixelLayer(trigger) => write!(f, "{}", trigger),
             Self::Capability((trigger, state)) => write!(f, "{}({})", trigger, state),
             Self::Other(trigger) => write!(f, "{}", trigger),
+            Self::NOP => write!(f, "None"),
         }
     }
 }
@@ -509,6 +524,265 @@ impl fmt::Display for PixelColor {
     }
 }
 
+#[pest_consume::parser]
+impl KLLParser {
+    fn EOI(_input: Node) -> Result<()> {
+        Ok(())
+    }
+    fn file(input: Node) -> Result<Vec<Statement>> {
+        Ok(match_nodes!(input.into_children();
+            [statement(statements).., _] => statements.collect(),
+        ))
+    }
+
+    fn word(input: Node) -> Result<&str> {
+        Ok(input.as_str())
+    }
+    fn string(input: Node) -> Result<&str> {
+        Ok(input.as_str().trim_matches('"'))
+    }
+    fn number(input: Node) -> Result<usize> {
+        Ok(parse_int(input.as_str()))
+    }
+
+    fn name(input: Node) -> Result<&str> {
+        Ok(input.as_str())
+    }
+    fn value(input: Node) -> Result<&str> {
+        Ok(input.as_str())
+    }
+    fn array(input: Node) -> Result<(&str, usize)> {
+        Ok(match_nodes!(input.into_children();
+            [name(n), number(i)] => (n, i),
+        ))
+    }
+
+    fn kv(input: Node) -> Result<(&str, &str)> {
+        Ok(match_nodes!(input.into_children();
+            [word(k), word(v)] => (k,v),
+            [word(k), ] => (k,"")
+        ))
+    }
+    fn kvmap(input: Node) -> Result<HashMap<&str, &str>> {
+        Ok(match_nodes!(input.into_children();
+            [kv(kv)..] => kv.collect(),
+        ))
+    }
+
+    fn function(input: Node) -> Result<Capability> {
+        Ok(match_nodes!(input.into_children();
+            [name(n), kvmap(args)] => Capability {
+                function: n,
+                args: args.keys().map(|x| *x).collect(), // XXX
+            }
+        ))
+    }
+
+    fn binding(input: Node) -> Result<TriggerVarient> {
+        Ok(match input.as_str() {
+            ":" => TriggerVarient::Replace,
+            "::" => TriggerVarient::SoftReplace,
+            ":+" => TriggerVarient::Add,
+            ":-" => TriggerVarient::Remove,
+            "i:" => TriggerVarient::IsolateReplace,
+            "i::" => TriggerVarient::IsolateSoftReplace,
+            "i:+" => TriggerVarient::IsolateAdd,
+            "i:-" => TriggerVarient::IsolateRemove,
+            _ => unreachable!(),
+        })
+    }
+
+    fn channel(input: Node) -> Result<PixelColor> {
+        let color = input.as_str();
+        Ok(match &color[0..1] {
+            "+" | "-" => PixelColor::Relative(color.parse::<isize>().unwrap()),
+            _ => PixelColor::Rgb(parse_int(color)),
+        })
+    }
+
+    fn pixelval(input: Node) -> Result<Pixel> {
+        Ok(match_nodes!(input.into_children();
+            [kvmap(index), channel(c)..] => {
+                Pixel {
+                    range: PixelRange {
+                        index: Some(PixelAddr::Absolute(parse_int(index.keys().next().unwrap()))), // XXX
+                        row: None,
+                        col: None,
+                    },
+                    channel_values: c.collect(),
+                }
+            }
+        ))
+    }
+
+    fn scancode(input: Node) -> Result<usize> {
+        Ok(parse_int(input.as_str().strip_prefix("S").unwrap()))
+    }
+    fn usbcode(input: Node) -> Result<Key> {
+        let usbcode = input.as_str().strip_prefix("U").unwrap();
+        Ok(Key::Usb(usbcode))
+    }
+    fn consumer(input: Node) -> Result<Key> {
+        let concode = input.as_str().strip_prefix("CON").unwrap();
+        Ok(Key::Consumer(concode))
+    }
+    fn system(input: Node) -> Result<Key> {
+        let syscode = input.as_str().strip_prefix("SYS").unwrap();
+        Ok(Key::System(syscode))
+    }
+    fn none(_input: Node) -> Result<&str> {
+        Ok("None")
+    }
+    fn key(input: Node) -> Result<Key> {
+        Ok(match_nodes!(input.into_children();
+                [scancode(s)] => Key::Scancode(s),
+                [usbcode(key)] => key,
+                [consumer(key)] => key,
+                [system(key)] => key,
+                [none(_)] => Key::None,
+        ))
+    }
+
+    fn key_trigger(input: Node) -> Result<KeyTrigger> {
+        let trigger = match_nodes!(input.into_children();
+            [key(key), kvmap(state)] => KeyTrigger {
+                keys: KeyGroup::Single(key), // XXX
+                press_state: None, // XXX
+                analog_state: None, // XXX
+            },
+            [key(key)] => KeyTrigger {
+                keys: KeyGroup::Single(key),
+                press_state: None,
+                analog_state: None,
+            },
+
+        );
+        Ok(trigger)
+    }
+    fn trigger(input: Node) -> Result<Trigger> {
+        Ok(match_nodes!(input.into_children();
+            [key_trigger(trigger)] => Trigger::Key(trigger),
+        ))
+    }
+
+    fn result(input: Node) -> Result<Action> {
+        Ok(match_nodes!(input.into_children();
+            [usbcode(key)] => Action::Output(KeyTrigger {
+                keys: KeyGroup::Single(key),
+                press_state: None,
+                analog_state: None,
+            }),
+            [consumer(key)] => Action::Output(KeyTrigger {
+                keys: KeyGroup::Single(key),
+                press_state: None,
+                analog_state: None,
+            }),
+            [system(key)] => Action::Output(KeyTrigger {
+                keys: KeyGroup::Single(key),
+                press_state: None,
+                analog_state: None,
+            }),
+            [pixelval(pixel)] => Action::Pixel(pixel),
+            [none(_)] => Action::NOP,
+        ))
+    }
+
+    fn property(input: Node) -> Result<Statement> {
+        let (variable, value) = match_nodes!(input.into_children();
+            [array((n,i)), value(v)] => (Variable::Array(n, i), v),
+            [string(n), value(v)] => (Variable::String(n), v),
+        );
+        Ok(Statement::Variable((variable, value)))
+    }
+    fn define(input: Node) -> Result<Statement> {
+        Ok(match_nodes!(input.into_children();
+            [name(n), value(v)] => Statement::Define((n, v))
+        ))
+    }
+    fn capability(input: Node) -> Result<Statement> {
+        Ok(match_nodes!(input.into_children();
+            [name(n), function(f)] =>  Statement::Capability((n, f)),
+        ))
+    }
+    fn mapping(input: Node) -> Result<Statement> {
+        Ok(match_nodes!(input.into_children();
+            [trigger(trigger), binding(mode), result(result)] => Statement::Keymap((trigger, mode, result)),
+        ))
+    }
+    fn position(input: Node) -> Result<Statement> {
+        Ok(match_nodes!(input.into_children();
+            [number(index), kvmap(map)] => {
+                let mut pos = Position::default();
+                for (k, v) in map.iter() {
+                    let v = v.parse::<usize>().unwrap();
+                    match *k {
+                        "x" => pos.x = v,
+                        "y" => pos.y = v,
+                        "z" => pos.z = v,
+                        "rx" => pos.rx = v,
+                        "ry" => pos.ry = v,
+                        "rz" => pos.rz = v,
+                        _ => {}
+                    }
+                }
+
+                Statement::Position((index, pos))
+            }
+        ))
+    }
+    fn pixelmap(input: Node) -> Result<Statement> {
+        Ok(match_nodes!(input.into_children();
+            [number(index), kvmap(channelmap), scancode(scancode)] => {
+                let channels = channelmap
+                    .iter()
+                    .map(|(k, v)| {
+                        let k = k.parse::<usize>().unwrap();
+                        let v = v.parse::<usize>().unwrap();
+                        (k, v)
+                    })
+                    .collect::<Vec<_>>();
+                let pixel = PixelDef {
+                    scancode: Some(scancode),
+                    channels,
+                };
+                Statement::Pixelmap((index, pixel))
+            }
+        ))
+    }
+    fn animdef(input: Node) -> Result<Statement> {
+        Ok(match_nodes!(input.into_children();
+            [name(name), kvmap(args)] => {
+                let animation = Animation {
+                    modifiers: args.keys().map(|x| *x).collect(), // XXX
+                    frames: vec![],
+                };
+
+                Statement::Animation((name, animation))
+            }
+        ))
+    }
+    fn animframe(input: Node) -> Result<Statement> {
+        Ok(match_nodes!(input.into_children();
+            [name(name), number(index), pixelval(pixels)..] => {
+                Statement::Frame((name, index, pixels.collect()))
+            }
+        ))
+    }
+    fn statement(input: Node) -> Result<Statement> {
+        //dbg!(input.as_str());
+        Ok(match_nodes!(input.into_children();
+                [property(stmt)] => stmt,
+                [define(stmt)] => stmt,
+                [capability(stmt)] => stmt,
+                [mapping(stmt)]=> stmt,
+                [position(stmt)] => stmt,
+                [pixelmap(stmt)] => stmt,
+                [animdef(stmt)] => stmt,
+                [animframe(stmt)] => stmt,
+        ))
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct KllFile<'a> {
     pub statements: Vec<Statement<'a>>,
@@ -517,7 +791,7 @@ pub struct KllFile<'a> {
 #[derive(Debug, Default, Clone)]
 pub struct KllState<'a> {
     defines: HashMap<&'a str, &'a str>,
-    variables: HashMap<&'a str, Variable<'a>>,
+    variables: HashMap<Variable<'a>, &'a str>,
     capabilities: HashMap<&'a str, Capability<'a>>,
     keymap: Vec<(Trigger<'a>, TriggerVarient, Action<'a>)>,
     positions: HashMap<usize, Position>,
@@ -534,343 +808,14 @@ impl<'a> fmt::Display for KllFile<'a> {
     }
 }
 
-fn parse_int(s: &str) -> usize {
-    //dbg!(s);
-    if s.starts_with("0x") {
-        usize::from_str_radix(s.trim_start_matches("0x"), 16).unwrap()
-    } else {
-        usize::from_str_radix(s, 10).unwrap()
-    }
-}
-
-fn parse_array<'a>(lhs: Pair<'a, Rule>, rhs: &'a str) -> Statement<'a> {
-    let mut inner = lhs.into_inner();
-    let name = inner.next().unwrap().as_str();
-    let index = inner.next().unwrap().as_str().parse::<usize>().unwrap();
-    let value = Variable::Array(index, rhs);
-    Statement::Variable((name, value))
-}
-
-fn parse_variable<'a>(lhs: Pair<'a, Rule>, rhs: &'a str) -> Statement<'a> {
-    let name = lhs.as_str().trim_matches('"');
-    let value = Variable::String(rhs);
-    Statement::Variable((name, value))
-}
-
-fn parse_property(line: Pair<Rule>) -> Statement {
-    let mut parts = line.into_inner();
-    let lhs = parts.next().unwrap();
-    let rhs = parts.next().unwrap().as_str().trim_matches('"');
-
-    match lhs.as_rule() {
-        Rule::array => parse_array(lhs, rhs),
-        Rule::string => parse_variable(lhs, rhs),
-        _ => unreachable!(),
-    }
-}
-
-fn parse_define(line: Pair<Rule>) -> Statement {
-    let mut parts = line.into_inner();
-    let name = parts.next().unwrap().as_str();
-    let value = parts.next().unwrap().as_str();
-    Statement::Define((name, value))
-}
-
-fn parse_fn(element: Pair<Rule>) -> Capability {
-    let mut parts = element.into_inner();
-    let fun = parts.next().unwrap();
-    let args = parts.next().unwrap();
-
-    Capability {
-        function: fun.as_str(),
-        args: parse_args(args),
-    }
-}
-
-fn parse_args(element: Pair<Rule>) -> Vec<&str> {
-    let args = element.into_inner();
-
-    let mut result = vec![];
-    for item in args {
-        result.push(item.as_str());
-    }
-    result
-}
-
-fn parse_capability(line: Pair<Rule>) -> Statement {
-    let mut parts = line.into_inner();
-    let name = parts.next().unwrap().as_str();
-    let rhs = parts.next().unwrap();
-
-    let cap = parse_fn(rhs);
-    Statement::Capability((name, cap))
-}
-
-fn parse_mode(mode: Pair<Rule>) -> TriggerVarient {
-    match mode.as_str() {
-        ":" => TriggerVarient::Replace,
-        "::" => TriggerVarient::SoftReplace,
-        ":+" => TriggerVarient::Add,
-        ":-" => TriggerVarient::Remove,
-        "i:" => TriggerVarient::IsolateReplace,
-        "i::" => TriggerVarient::IsolateSoftReplace,
-        "i:+" => TriggerVarient::IsolateAdd,
-        "i:-" => TriggerVarient::IsolateRemove,
-        _ => unreachable!(),
-    }
-}
-
-fn parse_trigger(lhs: Pair<Rule>) -> Trigger {
-    let text = lhs.as_str();
-    let trigger = lhs.into_inner().next().unwrap();
-    match trigger.as_rule() {
-        Rule::key_trigger => {
-            let scancode = text.strip_prefix("S").unwrap();
-            let key = Key::Scancode(parse_int(scancode));
-            let trigger = KeyTrigger {
-                keys: KeyGroup::Single(key),
-                press_state: None,
-                analog_state: None,
-            };
-            Trigger::Key(trigger)
-        }
-        _ => unimplemented!(),
-    }
-}
-
-fn parse_scancode(text: &str) -> usize {
-    text.strip_prefix("S").unwrap().parse::<usize>().unwrap()
-}
-
-fn parse_usb(text: &str) -> KeyTrigger {
-    let usbcode = text.strip_prefix("U").unwrap();
-    let key = Key::Usb(usbcode);
-    KeyTrigger {
-        keys: KeyGroup::Single(key),
-        press_state: None,
-        analog_state: None,
-    }
-}
-
-fn parse_consumer(text: &str) -> KeyTrigger {
-    let code = text.strip_prefix("CON").unwrap();
-    let key = Key::Consumer(code);
-    KeyTrigger {
-        keys: KeyGroup::Single(key),
-        press_state: None,
-        analog_state: None,
-    }
-}
-
-fn parse_system(text: &str) -> KeyTrigger {
-    let code = text.strip_prefix("Sys").unwrap();
-    let key = Key::System(code);
-    KeyTrigger {
-        keys: KeyGroup::Single(key),
-        press_state: None,
-        analog_state: None,
-    }
-}
-
-fn parse_channels(channels: Pair<Rule>) -> Vec<PixelColor> {
-    let mut values = vec![];
-    for c in channels.into_inner() {
-        let color = c.as_str();
-        let value = match &color[0..1] {
-            "+" | "-" => PixelColor::Relative(color.parse::<isize>().unwrap()),
-            _ => PixelColor::Rgb(parse_int(color)),
-        };
-        values.push(value);
-    }
-    values
-}
-
-fn parse_pixel(element: Pair<Rule>) -> Pixel {
-    let mut parts = element.into_inner();
-    let index = parts.next().unwrap().as_str();
-    let channels = parts.next().unwrap();
-
-    Pixel {
-        range: PixelRange {
-            index: Some(PixelAddr::Absolute(parse_int(index))),
-            row: None,
-            col: None,
-        },
-        channel_values: parse_channels(channels),
-    }
-}
-
-fn parse_result(rhs: Pair<Rule>) -> Action {
-    let text = rhs.as_str();
-    let result = rhs.into_inner().next().unwrap();
-    match dbg!(result.as_rule()) {
-        Rule::usbcode => Action::Output(parse_usb(text)),
-        Rule::consumer => Action::Output(parse_consumer(text)),
-        Rule::system => Action::Output(parse_system(text)),
-        Rule::color => Action::Pixel(parse_pixel(result)),
-        _ => unimplemented!(),
-    }
-}
-
-fn parse_mapping(line: Pair<Rule>) -> Statement {
-    let mut parts = line.into_inner();
-    let lhs = parts.next().unwrap();
-    let assignment = parts.next().unwrap();
-    let rhs = parts.next().unwrap();
-
-    let trigger = parse_trigger(lhs);
-    let mode = parse_mode(assignment);
-    let result = parse_result(rhs);
-
-    Statement::Keymap((trigger, mode, result))
-}
-
-fn parse_kv(kv: Pair<Rule>) -> (&str, &str) {
-    let mut parts = kv.into_inner();
-    let k = parts.next().unwrap().as_str();
-    let v = parts.next().unwrap().as_str();
-    (k, v)
-}
-
-fn parse_kvmap(element: Pair<Rule>) -> HashMap<&str, &str> {
-    let mut map = HashMap::new();
-    for kv in element.into_inner() {
-        let (k, v) = parse_kv(kv);
-        map.insert(k, v);
-    }
-
-    map
-}
-
-fn parse_list(element: Pair<Rule>) -> Vec<&str> {
-    let mut list = vec![];
-    for item in element.into_inner() {
-        list.push(item.as_str());
-    }
-
-    list
-}
-
-fn parse_position(line: Pair<Rule>) -> Statement {
-    let mut parts = line.into_inner();
-    let index = parts.next().unwrap().as_str();
-    let map = parse_kvmap(parts.next().unwrap());
-
-    let mut pos = Position::default();
-    for (k, v) in map.iter() {
-        let v = v.parse::<usize>().unwrap();
-        match *k {
-            "x" => pos.x = v,
-            "y" => pos.y = v,
-            "z" => pos.z = v,
-            "rx" => pos.rx = v,
-            "ry" => pos.ry = v,
-            "rz" => pos.rz = v,
-            _ => {}
-        }
-    }
-
-    Statement::Position((parse_int(index), pos))
-}
-
-fn parse_pixelmap_left(lhs: Pair<Rule>) -> (usize, Vec<(usize, usize)>) {
-    let mut lhs = lhs.into_inner();
-    let index = parse_int(lhs.next().unwrap().as_str());
-
-    let channelmap = parse_kvmap(lhs.next().unwrap());
-    let channels = channelmap
-        .iter()
-        .map(|(k, v)| {
-            let k = k.parse::<usize>().unwrap();
-            let v = v.parse::<usize>().unwrap();
-            (k, v)
-        })
-        .collect::<Vec<_>>();
-
-    (index, channels)
-}
-
-fn parse_pixelmap(line: Pair<Rule>) -> Statement {
-    let mut parts = line.into_inner();
-    let lhs = parts.next().unwrap();
-    let rhs = parts.next().unwrap();
-
-    let (index, channels) = parse_pixelmap_left(lhs);
-    let scancode = parse_scancode(rhs.as_str());
-
-    let pixel = PixelDef {
-        scancode: Some(scancode),
-        channels,
-    };
-
-    Statement::Pixelmap((index, pixel))
-}
-
-fn parse_str(element: Pair<Rule>) -> &str {
-    let mut element = element.into_inner();
-    element.next().unwrap().as_str()
-}
-
-fn parse_animdef(line: Pair<Rule>) -> Statement {
-    let mut parts = line.into_inner();
-    let lhs = parts.next().unwrap();
-    let rhs = parts.next().unwrap();
-
-    let name = parse_str(lhs);
-    let animation = Animation {
-        modifiers: parse_list(rhs),
-        frames: vec![],
-    };
-
-    Statement::Animation((name, animation))
-}
-
-fn parse_anim_left(element: Pair<Rule>) -> (&str, usize) {
-    let mut parts = element.into_inner();
-    let name = parts.next().unwrap().as_str();
-    let index = parts.next().unwrap().as_str().parse::<usize>().unwrap();
-    (name, index)
-}
-
-fn parse_anim_right(elements: Pair<Rule>) -> Pixel {
-    let mut parts = elements.into_inner();
-    let pixel = parts.next().unwrap();
-    parse_pixel(pixel)
-}
-
-fn parse_animframe(line: Pair<Rule>) -> Statement {
-    let mut parts = line.into_inner();
-    let lhs = parts.next().unwrap();
-    let rhs = parts.next().unwrap();
-
-    let (name, index) = parse_anim_left(lhs);
-    let pixel = parse_anim_right(rhs);
-    Statement::Frame((name, index, pixel))
-}
-
-fn parse_statement(line: Pair<Rule>) -> Statement {
-    match line.as_rule() {
-        Rule::property => parse_property(line),
-        Rule::define => parse_define(line),
-        Rule::capability => parse_capability(line),
-        Rule::mapping => parse_mapping(line),
-        Rule::position => parse_position(line),
-        Rule::pixelmap => parse_pixelmap(line),
-        Rule::animdef => parse_animdef(line),
-        Rule::animframe => parse_animframe(line),
-        Rule::EOI => Statement::NOP,
-        _ => unreachable!(),
-    }
-}
-
 impl<'a> KllFile<'a> {
-    fn from_str(text: &str) -> Result<KllFile, PestError> {
-        let mut kll = KllFile::default();
+    fn from_str(text: &str) -> Result<KllFile> {
+        let inputs = KLLParser::parse(Rule::file, text)?;
+        let input = inputs.single()?;
 
-        let file = KLLParser::parse(Rule::file, text)?;
-        for line in file {
-            kll.statements.push(parse_statement(line));
-        }
+        let kll = KllFile {
+            statements: KLLParser::file(input)?,
+        };
 
         Ok(kll)
     }
@@ -904,7 +849,7 @@ impl<'a> KllFile<'a> {
                     let animation = kll.animations.entry(name).or_default();
                     let frames = &mut animation.frames;
                     if frames.len() <= index {
-                        frames.resize(index + 1, Pixel::default());
+                        frames.resize(index + 1, vec![]);
                     }
                     frames[index] = frame;
                 }
@@ -916,7 +861,7 @@ impl<'a> KllFile<'a> {
     }
 }
 
-pub fn parse(text: &str) -> Result<KllFile, PestError> {
+pub fn parse(text: &str) -> Result<KllFile> {
     KllFile::from_str(text)
 }
 
