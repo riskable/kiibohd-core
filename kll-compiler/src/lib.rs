@@ -10,13 +10,13 @@ use types::{
 
 #[derive(Debug, Default, Clone)]
 pub struct KllState<'a> {
-    defines: HashMap<&'a str, &'a str>,
-    variables: HashMap<Variable<'a>, &'a str>,
-    capabilities: HashMap<&'a str, Capability<'a>>,
-    keymap: Vec<(Trigger<'a>, TriggerVarient, Action<'a>)>,
-    positions: HashMap<usize, Position>,
-    pixelmap: HashMap<usize, PixelDef>,
-    animations: HashMap<&'a str, Animation<'a>>,
+    pub defines: HashMap<&'a str, &'a str>,
+    pub variables: HashMap<Variable<'a>, &'a str>,
+    pub capabilities: HashMap<&'a str, Capability<'a>>,
+    pub keymap: Vec<(Trigger<'a>, TriggerVarient, Action<'a>)>,
+    pub positions: HashMap<usize, Position>,
+    pub pixelmap: HashMap<usize, PixelDef>,
+    pub animations: HashMap<&'a str, Animation<'a>>,
 }
 
 impl<'a> KllFile<'a> {
