@@ -291,3 +291,21 @@ impl<'a> KllFile<'a> {
         Ok(kll)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use pest::Parser;
+    use crate::parser::{KLLParser, Rule};
+
+    #[test]
+    fn test_numbers() {
+        let number = KLLParser::parse(Rule::number, "1234");
+        assert!(number.is_ok());
+
+        let number = KLLParser::parse(Rule::number, "0x2f");
+        assert!(number.is_ok());
+
+        let not_number = KLLParser::parse(Rule::number, "this is not a number");
+        assert!(not_number.is_err());
+    }
+}

@@ -1,5 +1,6 @@
 mod parser;
 mod types;
+mod test;
 
 use parser::PestError;
 use std::collections::HashMap;
@@ -63,21 +64,4 @@ impl<'a> KllFile<'a> {
 
 pub fn parse(text: &str) -> Result<KllFile, PestError> {
     KllFile::from_str(text)
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::pest::Parser;
-    use crate::{KLLParser, Rule};
-
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-
-        /*let successful_parse = KLLParser::parse(Rule::field, "-273.15");
-        println!("{:?}", successful_parse);
-
-        let unsuccessful_parse = KLLParser::parse(Rule::field, "this is not a number");
-        println!("{:?}", unsuccessful_parse);*/
-    }
 }
