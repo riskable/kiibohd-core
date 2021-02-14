@@ -1,0 +1,10 @@
+Name = "Simple Example";
+Author = "HaaTa (Jacob Alexander) 2014-2015";
+
+usbKeyOut => Output_usbCodeSend_capability( usbCode : 1 );
+S0x40 : U0x43;
+S0x40 : U"Backspace";
+
+S0x42 : U"]";
+S0x42 : U"Esc";
+

@@ -1,0 +1,8 @@
+Name = ExampleModule;
+Author = "HaaTa (Jacob Alexander) 2014";
+
+
+myCapability2 => myFunc2();
+myCapability3 => myFunc2( myArg1 : 2 );
+myCapability  => myFunc( myArg1 : 1, myArg2 : 4 );
+usbKeyOut   => Output_usbCodeSend_capability( usbCode : 1 );

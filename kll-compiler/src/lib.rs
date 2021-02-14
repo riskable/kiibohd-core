@@ -1,6 +1,6 @@
 mod parser;
-mod types;
 mod test;
+mod types;
 
 use parser::PestError;
 use std::collections::HashMap;

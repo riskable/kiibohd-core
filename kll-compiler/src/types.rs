@@ -313,6 +313,10 @@ impl<'a> fmt::Display for GenericTrigger {
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Trigger<'a> {
     Key(KeyTrigger<'a>),
+    Layer(LayerTrigger),
+    Indicator(IndicatorTrigger),
+    Generic(GenericTrigger),
+    Animation(&'a str),
     Other(&'a str),
 }
 
@@ -320,6 +324,10 @@ impl<'a> fmt::Display for Trigger<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Key(trigger) => write!(f, "{}", trigger),
+            Self::Layer(trigger) => write!(f, "{}", trigger),
+            Self::Indicator(trigger) => write!(f, "{}", trigger),
+            Self::Generic(trigger) => write!(f, "{}", trigger),
+            Self::Animation(name) => write!(f, "A[{}]", name),
             Self::Other(text) => write!(f, "{}", text),
         }
     }
@@ -328,6 +336,7 @@ impl<'a> fmt::Display for Trigger<'a> {
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Key<'a> {
     Scancode(usize),
+    Char(&'a str),
     Usb(&'a str),
     Consumer(&'a str),
     System(&'a str),
@@ -339,8 +348,9 @@ impl<'a> fmt::Display for Key<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Key::Scancode(num) => write!(f, "S{}", num),
+            Key::Char(num) => write!(f, "'{}'", num),
             Key::Usb(name) => write!(f, "U{}", name),
-            Key::Consumer(name) => write!(f, "CON{}", name),
+            Key::Consumer(name) => write!(f, "CONS{}", name),
             Key::System(name) => write!(f, "SYS{}", name),
             Key::Other(name) => write!(f, "{}", name),
             Key::None => write!(f, "None"),
@@ -355,7 +365,7 @@ pub enum Action<'a> {
     Animation(AnimationAction<'a>),
     Pixel(Pixel),
     PixelLayer(Pixel),
-    Capability((Capability<'a>, KeyState)),
+    Capability((Capability<'a>, Option<KeyState>)),
     Other(&'a str),
     NOP,
 }
@@ -368,7 +378,7 @@ impl<'a> fmt::Display for Action<'a> {
             Self::Animation(trigger) => write!(f, "{}", trigger),
             Self::Pixel(trigger) => write!(f, "{}", trigger),
             Self::PixelLayer(trigger) => write!(f, "{}", trigger),
-            Self::Capability((trigger, state)) => write!(f, "{}({})", trigger, state),
+            Self::Capability((trigger, state)) => write!(f, "{}({:?})", trigger, state),
             Self::Other(trigger) => write!(f, "{}", trigger),
             Self::NOP => write!(f, "None"),
         }
