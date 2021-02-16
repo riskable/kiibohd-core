@@ -11,7 +11,7 @@ pub fn maybe_quote(text: &str) -> String {
 #[derive(Debug, Clone)]
 pub enum Statement<'a> {
     Define((&'a str, &'a str)),
-    Variable((Variable<'a>, &'a str)),
+    Variable((&'a str, Option<usize>, &'a str)),
     Capability((&'a str, Capability<'a>)),
     Keymap((Trigger<'a>, TriggerVarient, Action<'a>)),
     Position((usize, Position)),
@@ -25,18 +25,19 @@ impl<'a> fmt::Display for Statement<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Define((name, val)) => write!(f, "{} = {};", name, maybe_quote(val)),
-            Self::Variable((var, val)) => match var {
-                Variable::Array(name, index) => write!(
-                    f,
-                    "{}[{}] = {};",
-                    maybe_quote(name),
-                    index,
-                    maybe_quote(val)
-                ),
-                Variable::String(name) => {
+            Self::Variable((name, index, val)) => {
+                if let Some(index) = index {
+                    write!(
+                        f,
+                        "{}[{}] = {};",
+                        maybe_quote(name),
+                        index,
+                        maybe_quote(val)
+                    )
+                } else {
                     write!(f, "{} = {};", maybe_quote(name), maybe_quote(val))
                 }
-            },
+            }
             Self::Capability((name, cap)) => write!(f, "{} = {};", name, cap),
             Self::Keymap((trigger, varient, action)) => {
                 write!(f, "{} {} {};", trigger, varient, action)
@@ -64,12 +65,6 @@ impl<'a> fmt::Display for Statement<'a> {
             Self::NOP => Ok(()),
         }
     }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub enum Variable<'a> {
-    Array(&'a str, usize),
-    String(&'a str),
 }
 
 #[derive(Debug, Default, Clone)]

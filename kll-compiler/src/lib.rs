@@ -6,13 +6,18 @@ use parser::PestError;
 use std::collections::HashMap;
 use types::{
     Action, Animation, Capability, KllFile, PixelDef, Position, Statement, Trigger, TriggerVarient,
-    Variable,
 };
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub enum Value<'a> {
+    List(Vec<&'a str>),
+    Single(&'a str),
+}
 
 #[derive(Debug, Default, Clone)]
 pub struct KllState<'a> {
     pub defines: HashMap<&'a str, &'a str>,
-    pub variables: HashMap<Variable<'a>, &'a str>,
+    pub variables: HashMap<&'a str, Value<'a>>,
     pub capabilities: HashMap<&'a str, Capability<'a>>,
     pub keymap: Vec<(Trigger<'a>, TriggerVarient, Action<'a>)>,
     pub positions: HashMap<usize, Position>,
@@ -28,8 +33,23 @@ impl<'a> KllFile<'a> {
                 Statement::Define((name, val)) => {
                     kll.defines.insert(name, val);
                 }
-                Statement::Variable((name, val)) => {
-                    kll.variables.insert(name, val);
+                Statement::Variable((name, index, val)) => {
+                    let entry = kll.variables.entry(name).or_insert_with(|| match index {
+                        Some(_) => Value::List(vec![]),
+                        None => Value::Single(val),
+                    });
+                    match entry {
+                        Value::List(vec) => {
+                            let index = index.unwrap(); // Should be set because this is an array
+                            if index >= vec.len() {
+                                vec.resize(index + 1, "");
+                            }
+                            vec[index] = val;
+                        }
+                        Value::Single(s) => {
+                            *s = val;
+                        }
+                    };
                 }
                 Statement::Capability((name, cap)) => {
                     kll.capabilities.insert(name, cap);

@@ -252,12 +252,12 @@ impl KLLParser {
     }
 
     fn property(input: Node) -> Result<Statement> {
-        let (variable, value) = match_nodes!(input.into_children();
-            [name(n), rhs(v)] => (Variable::String(n), v),
-            [array((n,i)), rhs(v)] => (Variable::Array(n, i.unwrap_or(0)), v), // XXX
-            [string(n), rhs(v)] => (Variable::String(n), v),
+        let (name, index, value) = match_nodes!(input.into_children();
+            [name(n), rhs(v)] => (n, None, v),
+            [array((n,i)), rhs(v)] => (n, i, v), // XXX
+            [string(n), rhs(v)] => (n, None, v),
         );
-        Ok(Statement::Variable((variable, value)))
+        Ok(Statement::Variable((name, index, value)))
     }
     fn define(input: Node) -> Result<Statement> {
         Ok(match_nodes!(input.into_children();
