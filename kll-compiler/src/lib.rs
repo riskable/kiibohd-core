@@ -1,6 +1,7 @@
-mod parser;
+pub mod emitters;
+pub mod parser;
 mod test;
-mod types;
+pub mod types;
 
 use parser::PestError;
 use std::collections::HashMap;
