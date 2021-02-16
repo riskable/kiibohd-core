@@ -1,0 +1,4 @@
+myDefine => myCDefine;
+myIntDefine => myCDefine;
+
+myDefine = "Huzzah";

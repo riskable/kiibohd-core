@@ -7,3 +7,6 @@
 # target = "thumbv8m.base-none-eabi"   # Cortex-M23
 # target = "thumbv8m.main-none-eabi"   # Cortex-M33 (no FPU)
 # target = "thumbv8m.main-none-eabihf" # Cortex-M33 (with FPU)
+
+[unstable]
+features = ["host_dep"]
