@@ -1,0 +1,37 @@
+[package]
+name          = "kiibohd-core"
+version       = "0.1.0"
+authors       = ["Jacob Alexander <haata@kiibohd.com>"]
+
+edition       = "2018"
+
+
+[lib]
+name = "kiibohd_core"
+
+
+[features]
+default = [
+  "kiibohd-hall-effect",
+  "kiibohd-hid-io",
+]
+
+# The std option is used for cargo test only
+std = []
+
+
+[workspace]
+members = [
+  "kiibohd-hall-effect",
+  "kiibohd-hid-io",
+]
+
+
+[dependencies]
+c_utf8              = { version = "^0.1", default-features = false }
+cstr_core           = { version = "^0.2", default-features = false }
+heapless            = { version = "^0.6" }
+kiibohd-hid-io      = { path = "kiibohd-hid-io", optional = true }
+kiibohd-hall-effect = { path = "kiibohd-hall-effect", optional = true }
+pkg-version         = { version = "^1.0" }
+typenum             = { version = "^1.12", features = ["no_std"] }

@@ -1,0 +1,15 @@
+header = "// SPDX-License-Identifier: MIT"
+sys_includes = ["stddef.h", "stdint.h", "stdlib.h"]
+no_includes = true
+include_guard = "KIIBOHD_CORE_H"
+tab_width = 4
+style = "Type"
+language = "C"
+
+[parse]
+include = ["kiibohd-hall-effect", "kiibohd-hid-io"]
+parse_deps = true
+extra_bindings = ["kiibohd-hid-io"]
+
+[enum]
+prefix_with_name = true
