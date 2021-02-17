@@ -4,6 +4,6 @@ mod kll_defines {
 }
 
 fn main() {
-    println!("myDefine: {}", kll_defines::myDefine);
+    println!("myCDefine: {}", kll_defines::myCDefine);
     println!("myIntDefine: {}", kll_defines::myIntDefine);
 }

@@ -1,4 +1,5 @@
-myDefine => myCDefine;
-myIntDefine => myCDefine;
+myCDefine => myCDefine;
+myIntDefine => myIntDefine;
+myIntDefine = 5;
 
-myDefine = "Huzzah";
+myCDefine = "Huzzah";
