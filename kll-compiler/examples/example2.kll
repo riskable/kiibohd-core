@@ -4,7 +4,7 @@
 U"CapsLock"                  : U"Ctrl";
 
 # Combination trigger, outputs a sequence of characters
-#U"Ctrl" + U"Alt" + U"Delete" : 'Grr, Bill Gates...'; # XXX
+U"Ctrl" + U"Alt" + U"Delete" : 'Grr, Bill Gates...';
 
 # Sequence of keys (like dead-keys), outputs a unicode character
 # Unicode requires a driver (not ready yet)

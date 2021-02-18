@@ -1,4 +1,4 @@
-#Name = mapping test;
+Name = mapping test;
 Author = "HaaTa (Jacob Alexander) 2016";
 
 # Mapping Operators ##
@@ -24,7 +24,7 @@ S0x06 :- U"G";
 S0x07 + S0x08 : U"H";
 S0x09, S0x0A  : U"I";
 
-#S[0x0B, 0x0B, 0x0C] : U"J";
+S[0x0B, 0x0B, 0x0C] : U"J";
 
 S0x0D :- U"K";
 
@@ -50,7 +50,7 @@ S0x14 i:- U"S";
 S0x15 + S0x16 i: U"U";
 S0x17, S0x18  i: U"V";
 
-#S[0x19, 0x1A] i: U"W";
+S[0x19, 0x1A] i: U"W";
 
 S0x1B i:- U"X";
 

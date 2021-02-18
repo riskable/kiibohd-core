@@ -17,13 +17,13 @@ I0x04 : U"Q";
 # Layer Trigger (new syntax)
 Layer[1] : U"F";
 Layer[1-3] : U"R";
-#Layer[2,3] : U"S";
+Layer[2,3] : U"S";
 LayerShift[2] : U"G";
 LayerLock[2] : U"H";
 LayerLatch[2] : U"I";
 U"J" : Layer[1]; # Functions as LayerShift[1]
 U"T" : Layer[1-3]; # Functions as LayerShift[1-3]
-#U"U" : Layer[2,3]; # Functions as LayerShift[2,3]
+U"U" : Layer[2,3]; # Functions as LayerShift[2,3]
 U"K" : LayerShift[1];
 U"L" : LayerLock[1];
 U"M" : LayerLatch[1];
@@ -42,19 +42,19 @@ T[9,0] : U"D"; # Layer Bank 1
 T[13,0] : U"E"; # Animation Bank 1
 T[17,0] : U"F"; # Sleep Bank 1
 T[18,40] : U"G"; # Inactive Bank 1, after 40 seconds
-#T[0,0] + T[0,1], T[0,2] : U"H";
-#T[0,0] + T[0,1] : U"I";
-#T[0,0], T[0,1] : U"J";
+T[0,0] + T[0,1], T[0,2] : U"H";
+T[0,0] + T[0,1] : U"I";
+T[0,0], T[0,1] : U"J";
 
 # Rotations
-#T[20,0](0) : U"A";
-#T[20,0](1) : U"B";
-#T[20,0](2) : U"C";
-#T[20,1](0) : U"1";
-#T[20,1](5) : U"2";
-#T[20,1](10) : U"3";
+T[20,0](0) : U"A";
+T[20,0](1) : U"B";
+T[20,0](2) : U"C";
+T[20,1](0) : U"1";
+T[20,1](5) : U"2";
+T[20,1](10) : U"3";
 U"Y" : rotate(0, 1);
-#U"X" : rotate(0, -1);
+U"X" : rotate(0, -1);
 U"W" : rotate(1, 1);
-#U"V" : rotate(1, -1);
+U"V" : rotate(1, -1);
 

@@ -13,7 +13,7 @@ pub enum Statement<'a> {
     Define((&'a str, &'a str)),
     Variable((&'a str, Option<usize>, &'a str)),
     Capability((&'a str, Capability<'a>)),
-    Keymap((Trigger<'a>, TriggerVarient, Action<'a>)),
+    Keymap((Vec<Trigger<'a>>, TriggerVarient, Vec<Action<'a>>)),
     Position((usize, Position)),
     Pixelmap((usize, PixelDef)),
     Animation((&'a str, Animation<'a>)),
@@ -39,8 +39,8 @@ impl<'a> fmt::Display for Statement<'a> {
                 }
             }
             Self::Capability((name, cap)) => write!(f, "{} = {};", name, cap),
-            Self::Keymap((trigger, varient, action)) => {
-                write!(f, "{} {} {};", trigger, varient, action)
+            Self::Keymap((triggers, varient, actions)) => {
+                write!(f, "{:?} {} {:?};", triggers, varient, actions)
             }
             Self::Position((index, pos)) => write!(f, "P[{}] <= {};", index, pos),
             Self::Pixelmap((index, map)) => write!(

@@ -81,7 +81,8 @@ S0x3E : U"BackTick";
 
 # TODO MOVE
 # Function Layer Assignments
-#U"Function1" : layerShift( 1 );
-#U"Function2" : layerShift( 1 );
-#U"Function3" : layerShift( 1 );
-#U"Function4" : layerShift( 1 );
+U"Function1" : layerShift( 1 );
+U"Function2" : layerShift( 1 );
+U"Function3" : layerShift( 1 );
+U"Function4" : layerShift( 1 );
+

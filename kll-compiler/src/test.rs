@@ -1,4 +1,4 @@
-#[cfg(test)]
+/*#[cfg(test)]
 mod trivial {
     use crate::types::KllFile;
 
@@ -65,7 +65,7 @@ mod trivial {
         let result = dbg!(KllFile::from_str("S100 : P[23](+43,+21,-40);\n"));
         assert!(result.is_ok());
     }
-}
+}*/
 
 #[allow(non_snake_case)]
 #[cfg(test)]

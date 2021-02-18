@@ -10,29 +10,34 @@ char = @{ !(WHITESPACE | reserved) ~ ANY }
 name_char = @{ LETTER | NUMBER | CONNECTOR_PUNCTUATION }
 
 name = @{ name_char+ }
-word = @{ char+ } 
-value = @{ string | char* }
+word = @{ char+ }
+value = @{ string | word }
 
 number = @{ "0x" ~ ASCII_HEX_DIGIT+ | NUMBER+ } 
 id = _{ string | number }
-range = { "[" ~ id ~ ("-" ~ id)? ~ "]" }
+
+id_with_state = _{ id ~ state? }
+range = { id_with_state ~ ("-" ~ id_with_state)? }
+ids = { range ~ ("," ~ range)* }
+index = _{ "[" ~ ids ~ "]" }
 
 time = { NUMBER ~ ("s" | "ms" | "us") }
 
+state = { "(" ~ kvmap ~ ")" }
 //key_state = { "P" | "UP" | "UR" | "R" | "H" | "O" }
-state = { "On" | "D" | "Off" }
+on_state = { "A" | "On" | "D" | "Off" }
 layer_type = { "LayerShift" | "LayerLatch" | "LayerLock" | "Layer" }
 charcode = { ("'" | "u'") ~ (!"'" ~ ANY) ~ "'" }
-pixel = { "P" ~ (range | id) }
-pixellayer = _{ "PL" ~ (range | id) }
-scancode = { "S" ~ (range | id) }
-unicode = { "U+" ~ value }
+pixel = { "P" ~ (index | id) }
+pixellayer = _{ "PL" ~ (index | id) }
+scancode = { "S" ~ (index | id) }
+unicode = { "U+" ~ value  }
 unistr = { "u" ~ string }
-usbcode = { "U" ~ (range | id) }
-consumer = { "CONS" ~ (range | id) }
-system = { "SYS" ~ (range | id) }
-indicator = { "I" ~ (range | id) }
-layer = { layer_type ~ range }
+usbcode = { "U" ~ (index | id) }
+consumer = { "CONS" ~ (index | id) }
+system = { "SYS" ~ (index | id) }
+indicator = { "I" ~ (index | id) }
+layer = { layer_type ~ index }
 trig = { "T[" ~ number ~ "," ~ number ~ "]" }
 none = { "None" }
 key = { scancode | charcode | usbcode }
@@ -43,44 +48,47 @@ kvmap = { kv ~ ("," ~ kv)* }
 array = { name ~ "[" ~ number? ~ "]" }
 function = { name ~ "(" ~ kvmap? ~ ")" }
 
-//rhs = { (!reserved ~ ANY)* }
-rhs = { value  ~ (" " ~ value)* }
+rhs = { value  ~ value* }
 lhs = _{ array | name | string }
 property = { lhs ~ "=" ~ rhs ~ ";" }
 define = { name ~ "=>" ~ value ~ ";" }
 capability = { name ~ "=>" ~ function ~ ";" }
 position = { (scancode | pixel) ~ "<=" ~ kvmap ~ ";" }
 
-//timing = { key_state ~ (":" ~ time)? }
-//timings = { timing ~ ("," ~ timing)* }
-
 key_trigger = { key ~ ("(" ~ kvmap ~ ")") | key }
-combo = _{ key_trigger ~ ("+" ~ key_trigger)+ }
-sequence = _{ (combo | key_trigger) ~ ("," ~ (combo | key_trigger))+ }
+indicator_trigger = { indicator ~  ("(" ~ on_state ~ ")") | indicator }
+layer_trigger = { layer ~ ("(" ~ on_state ~ ")") | layer }
+generic_trigger = { trig ~ ("(" ~ kvmap ~ ")") | trig }
 
-indicator_trigger = { indicator | indicator ~  ("(" ~ state ~ ")") }
-layer_trigger = { layer | layer ~ ("(" ~ state ~ ")") }
-generic_trigger = { trig | trig ~ ("(" ~ kvmap ~ ")") }
-trigger = { sequence | combo | key_trigger | layer_trigger | indicator_trigger | generic_trigger | animation }
+trigger = { key_trigger | layer_trigger | indicator_trigger | generic_trigger | animation }
+trigger_group = _{ trigger ~ ("+" ~ trigger)* }
+triggers = { trigger_group ~ ("," ~ trigger_group)* }
 
 
-result = { sequence | charcode | unicode | unistr | usbcode | consumer | system | generic_trigger | layer_trigger | function | pixelval | string | none }
+
+result = { charcode | unicode | unistr | key_trigger | usbcode | consumer | system | generic_trigger | layer_trigger | function | pixelval | animation_result | string | none }
+result_group = _{ result ~ ("+" ~ result)* }
+results = _{ result_group ~ ("," ~ result_group)* }
 
 
 binding = { "::" | ":+" | ":-" | ":" | "i::" | "i:+" | "i:-" | "i:" }
-mapping = { trigger ~ binding ~ result ~ ";" }
+mapping = { triggers ~ binding ~ results ~ ";" }
 
 pixeldef = _{ (pixellayer | pixel) ~ "(" ~ kvmap ~ ")" }
 pixelmap = { pixeldef ~ ":" ~ (scancode | none) ~ ";" }
 
-animation = _{ "A[" ~ name ~ "]" }
+animation = _{ ("A" ~ string) | ("A[" ~ name ~ "]") }
+animation_result = _{ animation	~ ("(" ~ kvmap? ~ ")")? }
 animdef = { animation ~ "<=" ~ kvmap ~ ";" }
 
-op = { "+" | "-" | "+:" | "-:" | "<<" | ">>" }
+op = { "+:" | "-:" | "+" | "-" | "<<" | ">>" }
 channel = { op? ~ number }
 channels = _{ channel ~ ("," ~ channel)* }
-pixelval = { "P[" ~ kvmap ~ "](" ~ channels ~ ")" }
+
+pixelindex = _{ ("PL"|"P") ~ "[" ~ kvmap ~ "]" }
+pixelval = { (pixelindex | scancode | usbcode) ~ "(" ~ channels ~ ")" }
 pixelvals = _{ pixelval ~ ("," ~ pixelval)* }
 
-frame = _{ "A[" ~ name ~ "," ~ number ~ "]" }
+frame = _{ "A[" ~ name ~ "," ~ ids ~ "]" }
 animframe = { frame ~ "<=" ~ pixelvals ~ ";" }
+

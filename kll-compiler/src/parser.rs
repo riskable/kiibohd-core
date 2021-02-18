@@ -14,9 +14,9 @@ pub struct KLLParser;
 fn parse_int(s: &str) -> usize {
     //dbg!(s);
     if s.starts_with("0x") {
-        usize::from_str_radix(s.trim_start_matches("0x"), 16).unwrap()
+        usize::from_str_radix(s.trim_start_matches("0x"), 16).unwrap_or(0)
     } else {
-        usize::from_str_radix(s, 10).unwrap()
+        usize::from_str_radix(s, 10).unwrap_or(0)
     }
 }
 
@@ -41,6 +41,11 @@ impl KLLParser {
         Ok(match_nodes!(input.into_children();
             [number(start)] => (start, start),
             [number(start), number(end)] => (start, end),
+        ))
+    }
+    fn ids(input: Node) -> Result<Vec<(usize, usize)>> {
+        Ok(match_nodes!(input.into_children();
+            [range(ranges)..] => ranges.collect(),
         ))
     }
 
@@ -101,20 +106,52 @@ impl KLLParser {
 
     fn pixel(input: Node) -> Result<usize> {
         Ok(match_nodes!(input.into_children();
+            [ids(ranges)] => ranges[0].0, // xxx
             [range((start, end))] => start, // xxx
             [number(index)] => index
         ))
     }
     fn channel(input: Node) -> Result<PixelColor> {
         let color = input.as_str();
-        Ok(match &color[0..1] {
-            "+" | "-" => PixelColor::Relative(color.parse::<isize>().unwrap()),
-            _ => PixelColor::Rgb(parse_int(color)),
-        })
+        //dbg!(color);
+        if color.len() >= 2 {
+            Ok(match (&color[0..1], &color[1..2]) {
+                ("+", ":") | ("-", ":") => {
+                    PixelColor::Relative(color[2..].parse::<isize>().unwrap())
+                } // XXX
+                (">", ">") | ("<", "<") => {
+                    PixelColor::Relative(color[2..].parse::<isize>().unwrap())
+                } // XXX
+                ("+", _) | ("-", _) => PixelColor::Relative(color.parse::<isize>().unwrap()),
+                _ => PixelColor::Rgb(parse_int(color)),
+            })
+        } else {
+            Ok(PixelColor::Rgb(parse_int(color)))
+        }
     }
 
     fn pixelval(input: Node) -> Result<Pixel> {
         Ok(match_nodes!(input.into_children();
+            [usbcode(index), channel(c)..] => {
+                Pixel {
+                    range: PixelRange {
+                        index: Some(PixelAddr::Absolute(0)), // XXX
+                        row: None,
+                        col: None,
+                    },
+                    channel_values: c.collect(),
+                }
+            },
+            [scancode(index), channel(c)..] => {
+                Pixel {
+                    range: PixelRange {
+                        index: Some(PixelAddr::Absolute(0)), // XXX
+                        row: None,
+                        col: None,
+                    },
+                    channel_values: c.collect(),
+                }
+            },
             [kvmap(index), channel(c)..] => {
                 Pixel {
                     range: PixelRange {
@@ -245,9 +282,12 @@ impl KLLParser {
             [pixelval(pixel)] => Action::Pixel(pixel),
             [function(cap)] => Action::Capability((cap, None)), // XXX
             [layer_trigger(layer)] => Action::Layer(layer),
+            [name(text)] => Action::NOP, // XXX
+            [name(text), kvmap(_)] => Action::NOP, // XXX
             [string(text)] => Action::NOP, // XXX
             [unistr(text)] => Action::NOP, // XXX
             [none(_)] => Action::NOP,
+            [_..] => Action::NOP,
         ))
     }
 
@@ -269,9 +309,14 @@ impl KLLParser {
             [name(n), function(f)] =>  Statement::Capability((n, f)),
         ))
     }
+    fn triggers(input: Node) -> Result<Vec<Trigger>> {
+        Ok(match_nodes!(input.into_children();
+            [trigger(triggers)..] => triggers.collect(),
+        ))
+    }
     fn mapping(input: Node) -> Result<Statement> {
         Ok(match_nodes!(input.into_children();
-            [trigger(trigger), binding(mode), result(result)] => Statement::Keymap((trigger, mode, result)),
+            [triggers(triggers), binding(mode), result(results)..] => Statement::Keymap((triggers, mode, results.collect())),
         ))
     }
     fn position(input: Node) -> Result<Statement> {
@@ -344,6 +389,9 @@ impl KLLParser {
     }
     fn animframe(input: Node) -> Result<Statement> {
         Ok(match_nodes!(input.into_children();
+            [name(name), ids(ranges), pixelval(pixels)..] => {
+                Statement::Frame((name, ranges[0].0, pixels.collect())) // xxx
+            },
             [name(name), number(index), pixelval(pixels)..] => {
                 Statement::Frame((name, index, pixels.collect()))
             }
@@ -352,6 +400,7 @@ impl KLLParser {
     fn statement(input: Node) -> Result<Statement> {
         //dbg!(input.as_str());
         //dbg!(&input);
+        //let _ = input.children().single().map(|n| dbg!(n.as_rule()));
         Ok(match_nodes!(input.into_children();
                 [property(stmt)] => stmt,
                 [define(stmt)] => stmt,

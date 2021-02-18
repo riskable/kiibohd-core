@@ -20,7 +20,7 @@ pub struct KllState<'a> {
     pub defines: HashMap<&'a str, &'a str>,
     pub variables: HashMap<&'a str, Value<'a>>,
     pub capabilities: HashMap<&'a str, Capability<'a>>,
-    pub keymap: Vec<(Trigger<'a>, TriggerVarient, Action<'a>)>,
+    pub keymap: Vec<(Vec<Trigger<'a>>, TriggerVarient, Vec<Action<'a>>)>,
     pub positions: HashMap<usize, Position>,
     pub pixelmap: HashMap<usize, PixelDef>,
     pub animations: HashMap<&'a str, Animation<'a>>,
@@ -55,8 +55,8 @@ impl<'a> KllFile<'a> {
                 Statement::Capability((name, cap)) => {
                     kll.capabilities.insert(name, cap);
                 }
-                Statement::Keymap((trigger, varient, action)) => {
-                    kll.keymap.push((trigger, varient, action));
+                Statement::Keymap((triggers, varient, actions)) => {
+                    kll.keymap.push((triggers, varient, actions));
                 }
                 Statement::Position((index, pos)) => {
                     kll.positions.insert(index, pos);
