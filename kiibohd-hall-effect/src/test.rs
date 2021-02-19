@@ -174,7 +174,7 @@ fn invalid_reading() {
 
 fn magnet_positive_check<U: ArrayLength<SenseData>>(sensors: &mut Sensors<U>) {
     // Add two values, larger than MaxAdc / 2 + MagnetBounds
-    let val = <MaxAdc>::to_u16() / 2 + <MagnetBounds>::to_u16() + 1;
+    let val = <MaxAdc>::to_u16() / 2 + <MagnetBounds>::to_u16() + 10;
     // (needs 2 samples to finish averaging)
     // Once averaging is complete, we'll get a result
     assert!(sensors.add::<U2, MaxAdc, MagnetBounds>(0, val).is_ok());
@@ -209,7 +209,7 @@ fn magnet_positive_check<U: ArrayLength<SenseData>>(sensors: &mut Sensors<U>) {
 
 fn magnet_negative_check<U: ArrayLength<SenseData>>(sensors: &mut Sensors<U>) {
     // Add two values, smaller than MaxAdc / 2 - MagnetBounds
-    let val = <MaxAdc>::to_u16() / 2 - <MagnetBounds>::to_u16() - 1;
+    let val = <MaxAdc>::to_u16() / 2 - <MagnetBounds>::to_u16() - 10;
     // (needs 2 samples to finish averaging)
     // Once averaging is complete, we'll get a result
     assert!(sensors.add::<U2, MaxAdc, MagnetBounds>(0, val).is_ok());
@@ -286,9 +286,94 @@ fn magnet_negative_remove_positive() {
     magnet_positive_check::<U1>(&mut sensors);
 }
 
-// TODO Tests
-// - Positive adjustments (repeat for negative adjustments)
-//   * When magnet detected (coming from SensorDetected), reset min/max
-//   * Default min -> lower min
-//   * Default min (recalibrates when going into Magnet+ state) -> higher min
-//   * SensorMissing should be a dead state
+#[test]
+fn min_max_reset() {
+    setup_logging_lite().ok();
+
+    // Allocate a single sensor
+    let mut sensors = Sensors::<U1>::new().unwrap();
+
+    magnet_positive_check::<U1>(&mut sensors);
+    let old_min = sensors.get_data(0).unwrap().min;
+    let old_max = sensors.get_data(0).unwrap().max;
+    no_magnet::<U1>(&mut sensors);
+    match sensors.get_data(0) {
+        Ok(data) => {
+            assert!(old_min != data.min, "Min value not reset");
+            assert!(old_max != data.max, "Max value not reset");
+            assert!(data.min == 0xFFFF);
+            assert!(data.max == 0x0000);
+        }
+        _ => {
+            assert!(false, "Expected SensorData: {:?}", sensors.get_data(0));
+        }
+    }
+}
+
+#[test]
+fn sensor_min_adjust() {
+    setup_logging_lite().ok();
+
+    // Allocate a single sensor
+    let mut sensors = Sensors::<U1>::new().unwrap();
+
+    // Baseline
+    magnet_positive_check::<U1>(&mut sensors);
+
+    // Send a lower value than the min calibration and make sure it was set
+    let old_min = sensors.get_data(0).unwrap().min;
+    let val = old_min - 5;
+
+    assert!(sensors.add::<U2, MaxAdc, MagnetBounds>(0, val).is_ok());
+    let state = sensors.add::<U2, MaxAdc, MagnetBounds>(0, val);
+    let mut test = false;
+    match state.clone() {
+        Ok(rval) => {
+            if let Some(rval) = rval {
+                if rval.raw == val {
+                    test = true;
+                }
+            }
+        }
+        _ => {}
+    }
+    assert!(test, "Unexpected state: {:?}", state);
+
+    // Check min calibration
+    let new_min = sensors.get_data(0).unwrap().min;
+    assert!(val == new_min);
+}
+
+#[test]
+fn sensor_max_adjust() {
+    setup_logging_lite().ok();
+
+    // Allocate a single sensor
+    let mut sensors = Sensors::<U1>::new().unwrap();
+
+    // Baseline
+    magnet_negative_check::<U1>(&mut sensors);
+
+    // Send a higher value than the max calibration and make sure it was set
+    let old_max = sensors.get_data(0).unwrap().max;
+    let val = old_max + 5;
+
+    assert!(sensors.add::<U2, MaxAdc, MagnetBounds>(0, val).is_ok());
+    let state = sensors.add::<U2, MaxAdc, MagnetBounds>(0, val);
+    let mut test = false;
+    match state.clone() {
+        Ok(rval) => {
+            if let Some(rval) = rval {
+                if rval.raw == val {
+                    test = true;
+                }
+            }
+        }
+        _ => {}
+    }
+    assert!(test, "Unexpected state: {:?}", state);
+
+    // Check min calibration
+    let new_max = sensors.get_data(0).unwrap().max;
+    assert!(val == new_max);
+}

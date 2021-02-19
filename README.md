@@ -22,8 +22,10 @@ You'll need to be using Rust nightly and cargo-c.
 
 ```bash
 rustup install nightly
+cargo install cargo-c --force
+
 cargo +nightly cbuild
-cargo +nightly --target thumbv7em-none-eabi --release
+cargo +nightly cbuild --target thumbv7em-none-eabi --release
 ```
 
 

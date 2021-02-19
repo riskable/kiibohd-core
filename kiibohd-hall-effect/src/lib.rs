@@ -84,12 +84,30 @@ impl SenseAnalysis {
         // Do raw lookup (we've already checked the bounds)
         let initial_distance = MODEL[raw as usize];
 
-        // TODO
-        // * Min/max adjustment
-
-        let distance = 0; // TODO
-        let velocity = distance - data.analysis.distance;
-        let acceleration = velocity - data.analysis.velocity;
+        // Min/max adjustment
+        let distance_offset = match data.cal {
+            CalibrationStatus::MagnetDetectedPositive => {
+                // Subtract the min lookup
+                // Lookup table has negative values for unexpectedly
+                // small values (greater than sensor center)
+                MODEL[data.min as usize]
+            }
+            CalibrationStatus::MagnetDetectedNegative => {
+                // Subtract the max lookup
+                // Lookup table has negative values for unexpectedly
+                // small values (greater than sensor center)
+                MODEL[data.max as usize]
+            }
+            _ => {
+                // Invalid reading
+                return SenseAnalysis::null();
+            }
+        };
+        let distance = initial_distance - distance_offset;
+        let velocity = (distance - data.analysis.distance) / 1;
+        let acceleration = (velocity - data.analysis.velocity) / 2;
+        // NOTE: To use jerk, the compile-time thresholds will need to be
+        //       multiplied by 3 (to account for the missing / 3)
         let jerk = acceleration - data.analysis.acceleration;
         SenseAnalysis {
             raw,
@@ -165,12 +183,12 @@ impl RawData {
 ///
 /// ```text,ignore
 ///
-///         4  5    ... <- Jerk (e.g. m/2^3)
-///        /\ /\
-///       3  4  5   ... <- Acceleration (e.g. m/2^2)
-///      /\ /\ /\
-///     2  3  4  5  ... <- Velocity (e.g. m/s)
-///    /\ /\ /\ /\
+///            4  5 ... <- Jerk (e.g. m/2^3)
+///          / | /|
+///         3  4  5 ... <- Acceleration (e.g. m/2^2)
+///       / | /| /|
+///      2  3  4  5 ... <- Velocity (e.g. m/s)
+///    / | /| /| /|
 ///   1  2  3  4  5 ... <- Distance (e.g. m)
 ///  ----------------------
 ///   1  2  3  4  5 ... <== ADC Averaged Sample
@@ -185,7 +203,7 @@ impl RawData {
 /// Jerk         => (a_current - a_previous) / 3 (constant time)
 ///                 There are 3 time units between samples 1 and 4
 ///
-/// NOTE: Division is computed at compile time.
+/// NOTE: Division is computed at compile time for jerk (/ 3)
 ///
 /// Time is simplified to 1 unit (normally sampling will be at a constant time-rate, so this should be somewhat accurate).
 #[repr(C)]
@@ -236,6 +254,9 @@ impl SenseData {
                 | CalibrationStatus::InvalidReading
                 | CalibrationStatus::SensorDetected
                 | CalibrationStatus::SensorMissing => {
+                    // Reset min/max
+                    self.min = 0xFFFF;
+                    self.max = 0x0000;
                     return Err(SensorError::CalibrationError(self.clone()));
                 }
                 _ => {}
@@ -250,8 +271,11 @@ impl SenseData {
     }
 
     /// Update calibration state
+    /// MX:  Max sensor value
+    /// RNG: +/- center threshold for magnet detection (Range Magnet)
     fn check_calibration<MX: Unsigned, RNG: Unsigned>(&self, data: u16) -> CalibrationStatus {
-        // TODO - How often should calibration be done?
+        // TODO(HaaTa): Should we force full recalibration periodically?
+        //              (drop min/max values)
         let lowmid = <MX>::U16 / 2 - <RNG>::U16; // Middle - range
         let highmid = <MX>::U16 / 2 + <RNG>::U16; // Middle + range
 
@@ -273,7 +297,6 @@ impl SenseData {
             return CalibrationStatus::MagnetDetectedNegative;
         }
 
-        // TODO Good +/- range
         // Check for sensor, no magnet detected
         if data <= highmid && data >= lowmid {
             return CalibrationStatus::SensorDetected;
