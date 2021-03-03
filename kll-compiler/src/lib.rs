@@ -58,22 +58,34 @@ impl<'a> KllFile<'a> {
                 Statement::Keymap((triggers, varient, actions)) => {
                     kll.keymap.push((triggers, varient, actions));
                 }
-                Statement::Position((index, pos)) => {
-                    kll.positions.insert(index, pos);
+                Statement::Position((indices, pos)) => {
+                    for range in indices {
+                        for index in range {
+                            kll.positions.insert(index, pos.clone());
+                        }
+                    }
                 }
-                Statement::Pixelmap((index, map)) => {
-                    kll.pixelmap.insert(index, map);
+                Statement::Pixelmap((indices, map)) => {
+                    for range in indices {
+                        for index in range {
+                            kll.pixelmap.insert(index, map.clone());
+                        }
+                    }
                 }
                 Statement::Animation((name, anim)) => {
                     kll.animations.insert(name, anim);
                 }
-                Statement::Frame((name, index, frame)) => {
+                Statement::Frame((name, indices, frame)) => {
                     let animation = kll.animations.entry(name).or_default();
                     let frames = &mut animation.frames;
-                    if frames.len() <= index {
-                        frames.resize(index + 1, vec![]);
+                    for range in indices {
+                        for index in range {
+                            if frames.len() <= index {
+                                frames.resize(index + 1, vec![]);
+                            }
+                            frames[index] = frame.clone();
+                        }
                     }
-                    frames[index] = frame;
                 }
                 Statement::NOP => {}
             };

@@ -1,4 +1,9 @@
+use std::collections::HashMap;
 use std::fmt;
+use std::ops::Range;
+
+pub type Indices = Vec<Range<usize>>;
+pub type Map<'a> = HashMap<&'a str, &'a str>;
 
 pub fn maybe_quote(text: &str) -> String {
     if text.contains(' ') {
@@ -14,10 +19,10 @@ pub enum Statement<'a> {
     Variable((&'a str, Option<usize>, &'a str)),
     Capability((&'a str, Capability<'a>)),
     Keymap((Vec<Trigger<'a>>, TriggerVarient, Vec<Action<'a>>)),
-    Position((usize, Position)),
-    Pixelmap((usize, PixelDef)),
+    Position((Indices, Position)),
+    Pixelmap((Indices, PixelDef)),
     Animation((&'a str, Animation<'a>)),
-    Frame((&'a str, usize, Vec<Pixel>)),
+    Frame((&'a str, Indices, Vec<Pixel>)),
     NOP,
 }
 
@@ -42,11 +47,11 @@ impl<'a> fmt::Display for Statement<'a> {
             Self::Keymap((triggers, varient, actions)) => {
                 write!(f, "{:?} {} {:?};", triggers, varient, actions)
             }
-            Self::Position((index, pos)) => write!(f, "P[{}] <= {};", index, pos),
-            Self::Pixelmap((index, map)) => write!(
+            Self::Position((indices, pos)) => write!(f, "P[{:?}] <= {};", indices, pos),
+            Self::Pixelmap((indices, map)) => write!(
                 f,
-                "P[{}]{} : {};",
-                index,
+                "P[{:?}]{} : {};",
+                indices,
                 map.channels
                     .iter()
                     .map(|(c, w)| format!("{}:{}", c, w))
@@ -56,11 +61,9 @@ impl<'a> fmt::Display for Statement<'a> {
                     .map(|x| format!("S{}", x))
                     .unwrap_or_else(|| "None".to_string())
             ),
-            Self::Animation((name, anim)) => {
-                write!(f, "A[{}] <= {};", name, anim.modifiers.join(", "))
-            }
-            Self::Frame((name, index, frame)) => {
-                write!(f, "A[{}, {}] <= {:?};", name, index, frame)
+            Self::Animation((name, anim)) => write!(f, "A[{}] <= {:?};", name, anim.modifiers),
+            Self::Frame((name, indices, frame)) => {
+                write!(f, "A[{}, {:?}] <= {:?};", name, indices, frame)
             }
             Self::NOP => Ok(()),
         }
@@ -75,6 +78,26 @@ pub struct Position {
     pub rx: usize, // deg
     pub ry: usize, // deg
     pub rz: usize, // deg
+}
+
+impl Position {
+    pub fn from_map(map: Map) -> Self {
+        let mut pos = Position::default();
+        for (k, v) in map.iter() {
+            let v = v.parse::<usize>().unwrap();
+            match *k {
+                "x" => pos.x = v,
+                "y" => pos.y = v,
+                "z" => pos.z = v,
+                "rx" => pos.rx = v,
+                "ry" => pos.ry = v,
+                "rz" => pos.rz = v,
+                _ => {}
+            }
+        }
+
+        pos
+    }
 }
 
 impl<'a> fmt::Display for Position {
@@ -107,21 +130,36 @@ pub struct PixelDef {
     pub scancode: Option<usize>,
 }
 
+impl PixelDef {
+    pub fn new(channelmap: Map, scancode: Option<usize>) -> Self {
+        let channels = channelmap
+            .iter()
+            .map(|(k, v)| {
+                let k = k.parse::<usize>().unwrap();
+                let v = v.parse::<usize>().unwrap();
+                (k, v)
+            })
+            .collect::<Vec<_>>();
+
+        PixelDef { scancode, channels }
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct Animation<'a> {
-    pub modifiers: Vec<&'a str>,
+    pub modifiers: Map<'a>,
     pub frames: Vec<Vec<Pixel>>,
 }
 
-#[derive(Debug, Default, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct Capability<'a> {
     pub function: &'a str,
-    pub args: Vec<&'a str>,
+    pub args: Map<'a>,
 }
 
 impl<'a> fmt::Display for Capability<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}", self.function, self.args.join(", "))
+        write!(f, "{}({:?})", self.function, self.args)
     }
 }
 
@@ -133,6 +171,20 @@ pub enum KeyState {
     Off,            // (O).  Not available for output
     UniquePress,    // (UP). Not available for output
     UniqueRelease,  // (UR). Not available for output
+}
+
+impl KeyState {
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "P" => Self::Press(0),
+            "H" => Self::Hold(0),
+            "R" => Self::Release(0),
+            "O" => Self::Off,
+            "UP" => Self::UniquePress,
+            "UR" => Self::UniqueRelease,
+            _ => unreachable!(),
+        }
+    }
 }
 
 impl<'a> fmt::Display for KeyState {
@@ -225,6 +277,18 @@ pub enum GenericState {
     Off,        // (Off)
 }
 
+impl GenericState {
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "A" => Self::Activate,
+            "On" => Self::On,
+            "D" => Self::Deactivate,
+            "Off" => Self::Off,
+            _ => unreachable!(),
+        }
+    }
+}
+
 impl<'a> fmt::Display for GenericState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -238,13 +302,13 @@ impl<'a> fmt::Display for GenericState {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct IndicatorTrigger {
-    pub indicator: usize,
+    pub indicator: Indices,
     pub state: Option<GenericState>,
 }
 
 impl<'a> fmt::Display for IndicatorTrigger {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "I{}", self.indicator)?;
+        write!(f, "I{:?}", self.indicator)?;
         if let Some(state) = &self.state {
             write!(f, "{}", state)?;
         }
@@ -260,6 +324,18 @@ pub enum LayerMode {
     Lock,
 }
 
+impl LayerMode {
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "Layer" => Self::Normal,
+            "LayerShift" => Self::Shift,
+            "LayerLatch" => Self::Latch,
+            "LayerLock" => Self::Lock,
+            _ => unreachable!(),
+        }
+    }
+}
+
 impl<'a> fmt::Display for LayerMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -273,14 +349,14 @@ impl<'a> fmt::Display for LayerMode {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct LayerTrigger {
-    pub layer: usize,
+    pub layer: Indices,
     pub mode: LayerMode,
     pub state: Option<GenericState>,
 }
 
 impl<'a> fmt::Display for LayerTrigger {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}[{}]", self.mode, self.layer)?;
+        write!(f, "{}[{:?}]", self.mode, self.layer)?;
         if let Some(state) = &self.state {
             write!(f, "({})", state)?;
         }
@@ -339,6 +415,13 @@ pub enum Key<'a> {
     None,
 }
 
+impl<'a> Key<'a> {
+    pub fn value(&self) -> usize {
+        // TODO: Add lookup tables
+        0
+    }
+}
+
 impl<'a> fmt::Display for Key<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -353,7 +436,7 @@ impl<'a> fmt::Display for Key<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Action<'a> {
     Output(KeyTrigger<'a>),
     Layer(LayerTrigger),
@@ -392,6 +475,22 @@ pub enum TriggerVarient {
     IsolateRemove,      // i:-
 }
 
+impl TriggerVarient {
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            ":" => Self::Replace,
+            "::" => Self::SoftReplace,
+            ":+" => Self::Add,
+            ":-" => Self::Remove,
+            "i:" => Self::IsolateReplace,
+            "i::" => Self::IsolateSoftReplace,
+            "i:+" => Self::IsolateAdd,
+            "i:-" => Self::IsolateRemove,
+            _ => unreachable!(),
+        }
+    }
+}
+
 impl fmt::Display for TriggerVarient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -414,6 +513,12 @@ pub enum PixelAddr {
     RelativePercent(usize),
 }
 
+impl PixelAddr {
+    pub fn from_str(s: &str) -> PixelAddr {
+        PixelAddr::Absolute(s.parse::<usize>().unwrap_or(0)) // XXX
+    }
+}
+
 impl fmt::Display for PixelAddr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -429,6 +534,24 @@ pub struct PixelRange {
     pub index: Option<PixelAddr>,
     pub row: Option<PixelAddr>,
     pub col: Option<PixelAddr>,
+    pub scancode: Option<usize>,
+    pub usbcode: Option<usize>,
+}
+
+impl PixelRange {
+    pub fn from_map(map: Map) -> Self {
+        let mut pos = PixelRange::default();
+        for (k, v) in map.iter() {
+            match *k {
+                "i" => pos.index = Some(PixelAddr::from_str(v)),
+                "r" => pos.row = Some(PixelAddr::from_str(v)),
+                "c" => pos.col = Some(PixelAddr::from_str(v)),
+                _ => {}
+            }
+        }
+
+        pos
+    }
 }
 
 impl fmt::Display for PixelRange {
@@ -499,6 +622,8 @@ impl fmt::Display for Pixel {
 pub enum PixelColor {
     Rgb(usize),
     Relative(isize),
+    RelativeNoRoll(isize),
+    Shift(isize),
 }
 
 impl fmt::Display for PixelColor {
@@ -506,6 +631,8 @@ impl fmt::Display for PixelColor {
         match self {
             Self::Rgb(v) => write!(f, "{}", v),
             Self::Relative(v) => write!(f, "{:+}", v),
+            Self::RelativeNoRoll(v) => write!(f, ":{:+}", v),
+            Self::Shift(v) => write!(f, "<{:+}", v),
         }
     }
 }

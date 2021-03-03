@@ -23,9 +23,9 @@ index = _{ "[" ~ ids ~ "]" }
 
 time = { NUMBER ~ ("s" | "ms" | "us") }
 
-state = { "(" ~ kvmap ~ ")" }
+state = _{ "(" ~ kvmap ~ ")" }
 //key_state = { "P" | "UP" | "UR" | "R" | "H" | "O" }
-on_state = { "A" | "On" | "D" | "Off" }
+//on_state = { "A" | "On" | "D" | "Off" }
 layer_type = { "LayerShift" | "LayerLatch" | "LayerLock" | "Layer" }
 charcode = { ("'" | "u'") ~ (!"'" ~ ANY) ~ "'" }
 pixel = { "P" ~ (index | id) }
@@ -55,10 +55,10 @@ define = { name ~ "=>" ~ value ~ ";" }
 capability = { name ~ "=>" ~ function ~ ";" }
 position = { (scancode | pixel) ~ "<=" ~ kvmap ~ ";" }
 
-key_trigger = { key ~ ("(" ~ kvmap ~ ")") | key }
-indicator_trigger = { indicator ~  ("(" ~ on_state ~ ")") | indicator }
-layer_trigger = { layer ~ ("(" ~ on_state ~ ")") | layer }
-generic_trigger = { trig ~ ("(" ~ kvmap ~ ")") | trig }
+key_trigger = { key ~ state | key }
+indicator_trigger = { indicator ~  state | indicator }
+layer_trigger = { layer ~ state | layer }
+generic_trigger = { trig ~ state | trig }
 
 trigger = { key_trigger | layer_trigger | indicator_trigger | generic_trigger | animation }
 trigger_group = _{ trigger ~ ("+" ~ trigger)* }
