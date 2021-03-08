@@ -24,8 +24,6 @@ index = _{ "[" ~ ids ~ "]" }
 time = { NUMBER ~ ("s" | "ms" | "us") }
 
 state = _{ "(" ~ kvmap ~ ")" }
-//key_state = { "P" | "UP" | "UR" | "R" | "H" | "O" }
-//on_state = { "A" | "On" | "D" | "Off" }
 layer_type = { "LayerShift" | "LayerLatch" | "LayerLock" | "Layer" }
 charcode = { ("'" | "u'") ~ (!"'" ~ ANY) ~ "'" }
 pixel = { "P" ~ (index | id) }
@@ -55,20 +53,15 @@ define = { name ~ "=>" ~ value ~ ";" }
 capability = { name ~ "=>" ~ function ~ ";" }
 position = { (scancode | pixel) ~ "<=" ~ kvmap ~ ";" }
 
-key_trigger = { key ~ state | key }
-indicator_trigger = { indicator ~  state | indicator }
-layer_trigger = { layer ~ state | layer }
-generic_trigger = { trig ~ state | trig }
-
-trigger = { key_trigger | layer_trigger | indicator_trigger | generic_trigger | animation }
-trigger_group = _{ trigger ~ ("+" ~ trigger)* }
+trigger_type = { key | layer | indicator | trig | animation }
+trigger = { trigger_type ~ ("(" ~ kvmap ~")")? }
+trigger_group = { trigger ~ ("+" ~ trigger)* }
 triggers = { trigger_group ~ ("," ~ trigger_group)* }
 
-
-
-result = { charcode | unicode | unistr | key_trigger | usbcode | consumer | system | generic_trigger | layer_trigger | function | pixelval | animation_result | string | none }
-result_group = _{ result ~ ("+" ~ result)* }
-results = _{ result_group ~ ("," ~ result_group)* }
+result_type = { charcode | unicode | unistr | usbcode | consumer | system | trig | layer | function | pixelval | animation_result | string | none }
+result = { result_type ~ ("(" ~ kvmap ~")")? }
+result_group = { result ~ ("+" ~ result)* }
+results = { result_group ~ ("," ~ result_group)* }
 
 
 binding = { "::" | ":+" | ":-" | ":" | "i::" | "i:+" | "i:-" | "i:" }
@@ -78,7 +71,7 @@ pixeldef = _{ (pixellayer | pixel) ~ "(" ~ kvmap ~ ")" }
 pixelmap = { pixeldef ~ ":" ~ (scancode | none) ~ ";" }
 
 animation = _{ ("A" ~ string) | ("A[" ~ name ~ "]") }
-animation_result = _{ animation	~ ("(" ~ kvmap? ~ ")")? }
+animation_result = { animation	~ ("(" ~ kvmap? ~ ")")? }
 animdef = { animation ~ "<=" ~ kvmap ~ ";" }
 
 op = { "+:" | "-:" | "+" | "-" | "<<" | ">>" }

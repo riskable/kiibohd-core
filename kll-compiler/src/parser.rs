@@ -12,7 +12,7 @@ type Node<'i> = pest_consume::Node<'i, Rule, ()>;
 #[grammar = "kll.pest"]
 pub struct KLLParser;
 
-fn parse_int(s: &str) -> usize {
+pub fn parse_int(s: &str) -> usize {
     //dbg!(s);
     if s.starts_with("0x") {
         usize::from_str_radix(s.trim_start_matches("0x"), 16).unwrap_or(0)
@@ -83,25 +83,25 @@ impl KLLParser {
         Ok(match_nodes!(input.into_children();
             [name(n)] => Capability {
                 function: n,
-                args: HashMap::new(),
+                args: vec![],
             },
             [name(n), kvmap(args)] => Capability {
                 function: n,
-                args: args,
+                args: args.keys().map(|x| *x).collect(), // xxx
             }
         ))
     }
 
-    fn binding(input: Node) -> Result<TriggerVarient> {
+    fn binding(input: Node) -> Result<TriggerMode> {
         Ok(match input.as_str() {
-            ":" => TriggerVarient::Replace,
-            "::" => TriggerVarient::SoftReplace,
-            ":+" => TriggerVarient::Add,
-            ":-" => TriggerVarient::Remove,
-            "i:" => TriggerVarient::IsolateReplace,
-            "i::" => TriggerVarient::IsolateSoftReplace,
-            "i:+" => TriggerVarient::IsolateAdd,
-            "i:-" => TriggerVarient::IsolateRemove,
+            ":" => TriggerMode::Replace,
+            "::" => TriggerMode::SoftReplace,
+            ":+" => TriggerMode::Add,
+            ":-" => TriggerMode::Remove,
+            "i:" => TriggerMode::IsolateReplace,
+            "i::" => TriggerMode::IsolateSoftReplace,
+            "i:+" => TriggerMode::IsolateAdd,
+            "i:-" => TriggerMode::IsolateRemove,
             _ => unreachable!(),
         })
     }
@@ -137,8 +137,7 @@ impl KLLParser {
                         index: None,
                         row: None,
                         col: None,
-                        scancode: None,
-                        usbcode: Some(usbcode.value()),
+                        key: Some(usbcode),
                     },
                     channel_values: c.collect(),
                 }
@@ -149,8 +148,7 @@ impl KLLParser {
                         index: None,
                         row: None,
                         col: None,
-                        scancode: Some(scancode),
-                        usbcode: None,
+                        key: Some(Key::Scancode(scancode)),
                     },
                     channel_values: c.collect(),
                 }
@@ -202,22 +200,6 @@ impl KLLParser {
         ))
     }
 
-    fn key_trigger(input: Node) -> Result<KeyTrigger> {
-        Ok(match_nodes!(input.into_children();
-            [key(key), kvmap(state)] => KeyTrigger {
-                keys: KeyGroup::Single(key),
-                press_state: None, // XXX
-                analog_state: None, // XXX
-            },
-            [key(key)] => KeyTrigger {
-                keys: KeyGroup::Single(key),
-                press_state: None,
-                analog_state: None,
-            },
-
-        ))
-    }
-
     fn layer_type(input: Node) -> Result<LayerMode> {
         Ok(LayerMode::from_str(input.as_str()))
     }
@@ -228,20 +210,6 @@ impl KLLParser {
             [layer_type(mode), number(index)] => (mode, vec![ Range { start: index, end: index } ]),
         ))
     }
-    fn layer_trigger(input: Node) -> Result<LayerTrigger> {
-        Ok(match_nodes!(input.into_children();
-            [layer((mode, indices))] => LayerTrigger {
-                layer: indices,
-                mode,
-                state: None,
-            },
-            [layer((mode, indices)), kvmap(map)] => LayerTrigger {
-                layer: indices,
-                mode,
-                state: Some(GenericState::from_str(map.keys().next().unwrap())), // XXX
-            },
-        ))
-    }
 
     fn indicator(input: Node) -> Result<Indices> {
         Ok(match_nodes!(input.into_children();
@@ -250,79 +218,71 @@ impl KLLParser {
             [string(name)] => vec![ Range { start: 0, end: 0 } ], // XXX (Need LUT)
         ))
     }
-    fn indicator_trigger(input: Node) -> Result<IndicatorTrigger> {
-        Ok(match_nodes!(input.into_children();
-            [indicator(indices)] => IndicatorTrigger {
-                indicator: indices,
-                state: None,
-            },
-            [indicator(indices), kvmap(map)] => IndicatorTrigger {
-                indicator: indices,
-                state: Some(GenericState::from_str(map.keys().next().unwrap())), // XXX
-            }
-        ))
-    }
 
-    fn trig(input: Node) -> Result<(usize, usize)> {
+    fn trig(input: Node) -> Result<(usize, usize, Option<usize>)> {
         Ok(match_nodes!(input.into_children();
-            [number(bank), number(index)] => (bank, index),
+            [number(bank), number(index)] => (bank, index, None),
+            [number(bank), number(index), number(arg)] => (bank, index, Some(arg)),
         ))
     }
-    fn generic_trigger(input: Node) -> Result<GenericTrigger> {
+    fn trigger_type(input: Node) -> Result<TriggerType> {
         Ok(match_nodes!(input.into_children();
-            [trig((bank, index))] => GenericTrigger {
-                bank,
-                index,
-                param: None,
-            },
-            [trig((bank, index)), kvmap(map)] => GenericTrigger {
-                bank,
-                index,
-                param: None, // XXX
-            },
+            [name(name)] => TriggerType::Animation(name),
+            [key(trigger)] => TriggerType::Key(trigger),
+            [layer(trigger)] => TriggerType::Layer(trigger),
+            [indicator(trigger)] => TriggerType::Indicator(trigger),
+            [trig((bank, index, arg))] => TriggerType::Generic((bank, index, arg)),
         ))
     }
     fn trigger(input: Node) -> Result<Trigger> {
         Ok(match_nodes!(input.into_children();
-            [name(name)] => Trigger::Animation(name),
-            [key_trigger(trigger)] => Trigger::Key(trigger),
-            [layer_trigger(trigger)] => Trigger::Layer(trigger),
-            [indicator_trigger(trigger)] => Trigger::Indicator(trigger),
-            [generic_trigger(trigger)] => Trigger::Generic(trigger),
-            [key_trigger(mut triggers)..] => Trigger::Key(triggers.next().unwrap()), // XXX
+            [trigger_type(trigger)] => Trigger {
+                trigger,
+                state: None,
+            },
+            [trigger_type(trigger), kvmap(args)] => Trigger {
+                trigger,
+                state: Some(StateMap::from_map(args)),
+            },
         ))
     }
 
+    fn result_type(input: Node) -> Result<ResultType> {
+        Ok(match_nodes!(input.into_children();
+            [charcode(key)] => ResultType::Output(key),
+            [unicode(key)] => ResultType::Output(key),
+            [usbcode(key)] => ResultType::Output(key),
+            [consumer(key)] => ResultType::Output(key),
+            [system(key)] => ResultType::Output(key),
+            [pixelval(pixel)] => ResultType::Pixel(pixel),
+            [animation_result(anim)] => ResultType::Animation(anim),
+            [function(cap)] => ResultType::Capability((cap, None)), // XXX
+            [layer(layer)] => ResultType::Layer(layer),
+            [string(text)] => ResultType::Text(text),
+            [unistr(text)] => ResultType::UnicodeText(text),
+            [none(_)] => ResultType::NOP,
+        ))
+    }
     fn result(input: Node) -> Result<Action> {
         Ok(match_nodes!(input.into_children();
-            [charcode(key)] => Action::Output(KeyTrigger {
-                keys: KeyGroup::Single(key),
-                press_state: None,
-                analog_state: None,
-            }),
-            [unicode(key)] => Action::NOP, // XXX
-            [usbcode(key)] => Action::Output(KeyTrigger {
-                keys: KeyGroup::Single(key),
-                press_state: None,
-                analog_state: None,
-            }),
-            [consumer(key)] => Action::Output(KeyTrigger {
-                keys: KeyGroup::Single(key),
-                press_state: None,
-                analog_state: None,
-            }),
-            [system(key)] => Action::Output(KeyTrigger {
-                keys: KeyGroup::Single(key),
-                press_state: None,
-                analog_state: None,
-            }),
-            [pixelval(pixel)] => Action::Pixel(pixel),
-            [function(cap)] => Action::Capability((cap, None)), // XXX
-            [layer_trigger(layer)] => Action::Layer(layer),
-            [string(text)] => Action::NOP, // XXX
-            [unistr(text)] => Action::NOP, // XXX
-            [none(_)] => Action::NOP,
-            [_..] => Action::NOP,
+            [result_type(result)] => Action {
+                result,
+                state: None,
+            },
+            [result_type(result), kvmap(args)] => Action {
+                result,
+                state: Some(StateMap::from_map(args)),
+            },
+        ))
+    }
+    fn result_group(input: Node) -> Result<Vec<Action>> {
+        Ok(match_nodes!(input.into_children();
+            [result(results)..] => results.collect(),
+        ))
+    }
+    fn results(input: Node) -> Result<Vec<Vec<Action>>> {
+        Ok(match_nodes!(input.into_children();
+            [result_group(groups)..] => groups.collect(),
         ))
     }
 
@@ -344,14 +304,19 @@ impl KLLParser {
             [name(n), function(f)] =>  Statement::Capability((n, f)),
         ))
     }
-    fn triggers(input: Node) -> Result<Vec<Trigger>> {
+    fn trigger_group(input: Node) -> Result<Vec<Trigger>> {
         Ok(match_nodes!(input.into_children();
             [trigger(triggers)..] => triggers.collect(),
         ))
     }
+    fn triggers(input: Node) -> Result<Vec<Vec<Trigger>>> {
+        Ok(match_nodes!(input.into_children();
+            [trigger_group(groups)..] => groups.collect(),
+        ))
+    }
     fn mapping(input: Node) -> Result<Statement> {
         Ok(match_nodes!(input.into_children();
-            [triggers(triggers), binding(mode), result(results)..] => Statement::Keymap((triggers, mode, results.collect())),
+            [triggers(triggers), binding(mode), results(results)] => Statement::Keymap((triggers, mode, results)),
         ))
     }
     fn position(input: Node) -> Result<Statement> {
@@ -392,6 +357,16 @@ impl KLLParser {
                 };
 
                 Statement::Animation((name, animation))
+            }
+        ))
+    }
+    fn animation_result(input: Node) -> Result<AnimationResult> {
+        Ok(match_nodes!(input.into_children();
+            [name(name), kvmap(args)] => {
+                AnimationResult {
+                    name,
+                    args: args.keys().map(|x| *x).collect(), // xxx
+                }
             }
         ))
     }

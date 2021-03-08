@@ -1,9 +1,18 @@
+use layouts::Layout;
 use std::collections::HashMap;
 use std::fmt;
 use std::ops::Range;
 
 pub type Indices = Vec<Range<usize>>;
 pub type Map<'a> = HashMap<&'a str, &'a str>;
+
+pub fn format_indices(ranges: &Indices) -> String {
+    ranges
+        .iter()
+        .map(|range| format!("{}-{}", range.start, range.end))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
 
 pub fn maybe_quote(text: &str) -> String {
     if text.contains(' ') {
@@ -18,11 +27,11 @@ pub enum Statement<'a> {
     Define((&'a str, &'a str)),
     Variable((&'a str, Option<usize>, &'a str)),
     Capability((&'a str, Capability<'a>)),
-    Keymap((Vec<Trigger<'a>>, TriggerVarient, Vec<Action<'a>>)),
+    Keymap((Vec<Vec<Trigger<'a>>>, TriggerMode, Vec<Vec<Action<'a>>>)),
     Position((Indices, Position)),
     Pixelmap((Indices, PixelDef)),
     Animation((&'a str, Animation<'a>)),
-    Frame((&'a str, Indices, Vec<Pixel>)),
+    Frame((&'a str, Indices, Vec<Pixel<'a>>)),
     NOP,
 }
 
@@ -47,11 +56,13 @@ impl<'a> fmt::Display for Statement<'a> {
             Self::Keymap((triggers, varient, actions)) => {
                 write!(f, "{:?} {} {:?};", triggers, varient, actions)
             }
-            Self::Position((indices, pos)) => write!(f, "P[{:?}] <= {};", indices, pos),
+            Self::Position((indices, pos)) => {
+                write!(f, "P[{}] <= {};", format_indices(indices), pos)
+            }
             Self::Pixelmap((indices, map)) => write!(
                 f,
-                "P[{:?}]{} : {};",
-                indices,
+                "P[{}]{} : {};",
+                format_indices(indices),
                 map.channels
                     .iter()
                     .map(|(c, w)| format!("{}:{}", c, w))
@@ -62,9 +73,13 @@ impl<'a> fmt::Display for Statement<'a> {
                     .unwrap_or_else(|| "None".to_string())
             ),
             Self::Animation((name, anim)) => write!(f, "A[{}] <= {:?};", name, anim.modifiers),
-            Self::Frame((name, indices, frame)) => {
-                write!(f, "A[{}, {:?}] <= {:?};", name, indices, frame)
-            }
+            Self::Frame((name, indices, frame)) => write!(
+                f,
+                "A[{}, {}] <= {:?};",
+                name,
+                format_indices(indices),
+                frame
+            ),
             Self::NOP => Ok(()),
         }
     }
@@ -148,171 +163,19 @@ impl PixelDef {
 #[derive(Debug, Default, Clone)]
 pub struct Animation<'a> {
     pub modifiers: Map<'a>,
-    pub frames: Vec<Vec<Pixel>>,
+    pub frames: Vec<Vec<Pixel<'a>>>,
 }
 
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, PartialEq, Eq, Hash, Clone)]
 pub struct Capability<'a> {
     pub function: &'a str,
-    pub args: Map<'a>,
+    //pub args: Map<'a>, // XXX: Can't hash a HashMap
+    pub args: Vec<&'a str>,
 }
 
 impl<'a> fmt::Display for Capability<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}({:?})", self.function, self.args)
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub enum KeyState {
-    Press(usize),   // (P:time)
-    Hold(usize),    // (H:time)
-    Release(usize), // (R:time)
-    Off,            // (O).  Not available for output
-    UniquePress,    // (UP). Not available for output
-    UniqueRelease,  // (UR). Not available for output
-}
-
-impl KeyState {
-    pub fn from_str(s: &str) -> Self {
-        match s {
-            "P" => Self::Press(0),
-            "H" => Self::Hold(0),
-            "R" => Self::Release(0),
-            "O" => Self::Off,
-            "UP" => Self::UniquePress,
-            "UR" => Self::UniqueRelease,
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl<'a> fmt::Display for KeyState {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Press(time) => {
-                write!(f, "P")?;
-                if *time != 0 {
-                    write!(f, ":{}", time)?;
-                }
-            }
-            Self::Hold(time) => {
-                write!(f, "H")?;
-                if *time != 0 {
-                    write!(f, ":{}", time)?;
-                }
-            }
-            Self::Release(time) => {
-                write!(f, "R")?;
-                if *time != 0 {
-                    write!(f, ":{}", time)?;
-                }
-            }
-            Self::Off => write!(f, "O")?,
-            Self::UniquePress => write!(f, "UP")?,
-            Self::UniqueRelease => write!(f, "UR")?,
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub enum KeyGroup<'a> {
-    Single(Key<'a>),
-    Sequence(Vec<KeyGroup<'a>>),
-    Combination(Vec<KeyGroup<'a>>),
-}
-
-impl<'a> fmt::Display for KeyGroup<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Single(key) => write!(f, "{}", key),
-            Self::Sequence(sequence) => write!(
-                f,
-                "{}",
-                sequence
-                    .iter()
-                    .map(|x| x.to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
-            Self::Combination(combo) => write!(
-                f,
-                "{}",
-                combo
-                    .iter()
-                    .map(|x| x.to_string())
-                    .collect::<Vec<String>>()
-                    .join(" + ")
-            ),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct KeyTrigger<'a> {
-    pub keys: KeyGroup<'a>,
-    pub press_state: Option<KeyState>,
-    pub analog_state: Option<usize>, // percent (0-100)
-}
-
-impl<'a> fmt::Display for KeyTrigger<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.keys)?;
-        if let Some(press_state) = &self.press_state {
-            write!(f, "{}", press_state)?;
-        }
-        if let Some(analog_state) = &self.analog_state {
-            write!(f, "{}", analog_state)?;
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub enum GenericState {
-    Activate,   // (A)
-    On,         // (On)
-    Deactivate, // (D)
-    Off,        // (Off)
-}
-
-impl GenericState {
-    pub fn from_str(s: &str) -> Self {
-        match s {
-            "A" => Self::Activate,
-            "On" => Self::On,
-            "D" => Self::Deactivate,
-            "Off" => Self::Off,
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl<'a> fmt::Display for GenericState {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Activate => write!(f, "A"),
-            Self::On => write!(f, "On"),
-            Self::Deactivate => write!(f, "D"),
-            Self::Off => write!(f, "Off"),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct IndicatorTrigger {
-    pub indicator: Indices,
-    pub state: Option<GenericState>,
-}
-
-impl<'a> fmt::Display for IndicatorTrigger {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "I{:?}", self.indicator)?;
-        if let Some(state) = &self.state {
-            write!(f, "{}", state)?;
-        }
-        Ok(())
     }
 }
 
@@ -348,58 +211,163 @@ impl<'a> fmt::Display for LayerMode {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct LayerTrigger {
-    pub layer: Indices,
-    pub mode: LayerMode,
-    pub state: Option<GenericState>,
-}
-
-impl<'a> fmt::Display for LayerTrigger {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}[{:?}]", self.mode, self.layer)?;
-        if let Some(state) = &self.state {
-            write!(f, "({})", state)?;
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct GenericTrigger {
-    pub bank: usize,
-    pub index: usize,
-    pub param: Option<usize>,
-}
-
-impl<'a> fmt::Display for GenericTrigger {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "T[{}, {}]", self.bank, self.index)?;
-        if let Some(param) = &self.param {
-            write!(f, "({})", param)?;
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub enum Trigger<'a> {
-    Key(KeyTrigger<'a>),
-    Layer(LayerTrigger),
-    Indicator(IndicatorTrigger),
-    Generic(GenericTrigger),
+pub enum TriggerType<'a> {
+    Key(Key<'a>),
+    Layer((LayerMode, Indices)),
+    Indicator(Indices),
+    Generic((usize, usize, Option<usize>)),
     Animation(&'a str),
-    Other(&'a str),
+}
+
+impl<'a> fmt::Display for TriggerType<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Key(trigger) => write!(f, "{}", trigger),
+            Self::Layer((mode, layer)) => write!(f, "{}[{}]", mode, format_indices(layer)),
+            Self::Indicator(indicators) => {
+                if indicators.len() > 1 {
+                    write!(f, "I[{}]", format_indices(indicators))
+                } else {
+                    write!(f, "I{}", format_indices(indicators))
+                }
+            }
+            Self::Generic((bank, index, param)) => {
+                if let Some(param) = &param {
+                    write!(f, "T[{}, {}]({})", bank, index, param)
+                } else {
+                    write!(f, "T[{}, {}]", bank, index)
+                }
+            }
+            Self::Animation(name) => write!(f, "A[{}]", name),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct Trigger<'a> {
+    pub trigger: TriggerType<'a>,
+    pub state: Option<StateMap>,
 }
 
 impl<'a> fmt::Display for Trigger<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(state) = &self.state {
+            write!(f, "{}({})", self.trigger, state)
+        } else {
+            write!(f, "{}", self.trigger)
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct State {
+    pub kind: StateType,
+    pub time: Option<usize>,
+}
+
+impl<'a> fmt::Display for State {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(time) = self.time {
+            write!(f, "{}:{}", self.kind, time)
+        } else {
+            write!(f, "{}", self.kind)
+        }
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Eq, Hash, Clone)]
+pub struct StateMap {
+    pub states: Vec<State>,
+}
+
+impl StateMap {
+    pub fn from_map(map: Map) -> Self {
+        let mut states = vec![];
+        for (k, v) in map.iter() {
+            let mut state = State {
+                kind: StateType::from_str(k),
+                time: None,
+            };
+            if let Ok(v) = v.parse::<usize>() {
+                state.time = Some(v);
+            }
+            states.push(state);
+        }
+
+        StateMap { states }
+    }
+}
+
+impl<'a> fmt::Display for StateMap {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.states
+                .iter()
+                .map(|x| x.to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+        )
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub enum StateType {
+    // Key
+    Press,         // (P)
+    Hold,          // (H)
+    Release,       // (R)
+    Unpressed,     // (O)
+    UniquePress,   // (UP)
+    UniqueRelease, // (UR)
+    Analog(usize), // 0-100
+
+    // Other
+    Activate,   // (A)
+    On,         // (On)
+    Deactivate, // (D)
+    Off,        // (Off)
+}
+
+impl StateType {
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            // Key
+            "P" => Self::Press,
+            "H" => Self::Hold,
+            "R" => Self::Release,
+            "O" => Self::Unpressed,
+            "UP" => Self::UniquePress,
+            "UR" => Self::UniqueRelease,
+
+            // Other
+            "A" => Self::Activate,
+            "On" => Self::On,
+            "D" => Self::Deactivate,
+            "Off" => Self::Off,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl<'a> fmt::Display for StateType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Key(trigger) => write!(f, "{}", trigger),
-            Self::Layer(trigger) => write!(f, "{}", trigger),
-            Self::Indicator(trigger) => write!(f, "{}", trigger),
-            Self::Generic(trigger) => write!(f, "{}", trigger),
-            Self::Animation(name) => write!(f, "A[{}]", name),
-            Self::Other(text) => write!(f, "{}", text),
+            // Key
+            Self::Press => write!(f, "P"),
+            Self::Hold => write!(f, "H"),
+            Self::Release => write!(f, "R"),
+            Self::Unpressed => write!(f, "O"),
+            Self::UniquePress => write!(f, "UP"),
+            Self::UniqueRelease => write!(f, "UR"),
+            Self::Analog(v) => write!(f, "{}", v),
+
+            // Other
+            Self::Activate => write!(f, "A"),
+            Self::On => write!(f, "On"),
+            Self::Deactivate => write!(f, "D"),
+            Self::Off => write!(f, "Off"),
         }
     }
 }
@@ -411,14 +379,22 @@ pub enum Key<'a> {
     Usb(&'a str),
     Consumer(&'a str),
     System(&'a str),
-    Other(&'a str),
+    Unicode(&'a str),
     None,
 }
 
 impl<'a> Key<'a> {
-    pub fn value(&self) -> usize {
-        // TODO: Add lookup tables
-        0
+    pub fn value(&self, layout: &Layout) -> usize {
+        use crate::parser::parse_int;
+        match self {
+            Key::Scancode(num) => *num,
+            Key::Char(c) => parse_int(&layout.from_hid_keyboard[*c]),
+            Key::Usb(name) => parse_int(&layout.from_hid_keyboard[*name]),
+            Key::Consumer(name) => parse_int(&layout.from_hid_consumer[*name]),
+            Key::System(name) => parse_int(&layout.from_hid_sysctrl[*name]),
+            Key::Unicode(_) => 0, // xxx
+            Key::None => 0,
+        }
     }
 }
 
@@ -430,41 +406,65 @@ impl<'a> fmt::Display for Key<'a> {
             Key::Usb(name) => write!(f, "U{}", name),
             Key::Consumer(name) => write!(f, "CONS{}", name),
             Key::System(name) => write!(f, "SYS{}", name),
-            Key::Other(name) => write!(f, "{}", name),
+            Key::Unicode(name) => write!(f, "U+{}", name),
             Key::None => write!(f, "None"),
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Action<'a> {
-    Output(KeyTrigger<'a>),
-    Layer(LayerTrigger),
-    Animation(AnimationAction<'a>),
-    Pixel(Pixel),
-    PixelLayer(Pixel),
-    Capability((Capability<'a>, Option<KeyState>)),
-    Other(&'a str),
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub enum ResultType<'a> {
+    Output(Key<'a>),
+    Layer((LayerMode, Indices)),
+    Animation(AnimationResult<'a>),
+    Pixel(Pixel<'a>),
+    PixelLayer(Pixel<'a>),
+    Capability((Capability<'a>, Option<StateMap>)),
+    Text(&'a str),
+    UnicodeText(&'a str),
     NOP,
 }
 
-impl<'a> fmt::Display for Action<'a> {
+impl<'a> fmt::Display for ResultType<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Output(trigger) => write!(f, "{}", trigger),
-            Self::Layer(trigger) => write!(f, "{}", trigger),
+            Self::Layer((mode, layers)) => write!(f, "{}[{}]", mode, format_indices(layers)),
             Self::Animation(trigger) => write!(f, "{}", trigger),
             Self::Pixel(trigger) => write!(f, "{}", trigger),
             Self::PixelLayer(trigger) => write!(f, "{}", trigger),
-            Self::Capability((trigger, state)) => write!(f, "{}({:?})", trigger, state),
-            Self::Other(trigger) => write!(f, "{}", trigger),
+            Self::Capability((trigger, state)) => {
+                if let Some(state) = state {
+                    write!(f, "{}({})", trigger, state)
+                } else {
+                    write!(f, "{}", trigger)
+                }
+            }
+            Self::Text(text) => write!(f, "\"{}\"", text),
+            Self::UnicodeText(text) => write!(f, "u\"{}\"", text),
             Self::NOP => write!(f, "None"),
         }
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub enum TriggerVarient {
+pub struct Action<'a> {
+    pub result: ResultType<'a>,
+    pub state: Option<StateMap>,
+}
+
+impl<'a> fmt::Display for Action<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(state) = &self.state {
+            write!(f, "{}:{}", self.result, state)
+        } else {
+            write!(f, "{}", self.result)
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub enum TriggerMode {
     Replace,            // :
     SoftReplace,        // ::
     Add,                // :+
@@ -475,7 +475,7 @@ pub enum TriggerVarient {
     IsolateRemove,      // i:-
 }
 
-impl TriggerVarient {
+impl TriggerMode {
     pub fn from_str(s: &str) -> Self {
         match s {
             ":" => Self::Replace,
@@ -491,7 +491,7 @@ impl TriggerVarient {
     }
 }
 
-impl fmt::Display for TriggerVarient {
+impl fmt::Display for TriggerMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Replace => write!(f, ":"),
@@ -530,15 +530,14 @@ impl fmt::Display for PixelAddr {
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Hash, Clone)]
-pub struct PixelRange {
+pub struct PixelRange<'a> {
     pub index: Option<PixelAddr>,
     pub row: Option<PixelAddr>,
     pub col: Option<PixelAddr>,
-    pub scancode: Option<usize>,
-    pub usbcode: Option<usize>,
+    pub key: Option<Key<'a>>,
 }
 
-impl PixelRange {
+impl<'a> PixelRange<'a> {
     pub fn from_map(map: Map) -> Self {
         let mut pos = PixelRange::default();
         for (k, v) in map.iter() {
@@ -554,7 +553,7 @@ impl PixelRange {
     }
 }
 
-impl fmt::Display for PixelRange {
+impl<'a> fmt::Display for PixelRange<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(index) = &self.index {
             write!(f, "{}", index)?;
@@ -570,40 +569,24 @@ impl fmt::Display for PixelRange {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct AnimationTrigger<'a> {
-    pub name: &'a str,
-    pub state: Option<GenericState>,
-}
-
-impl<'a> fmt::Display for AnimationTrigger<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "A[{}]", self.name)?;
-        if let Some(state) = &self.state {
-            write!(f, "({})", state)?;
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct AnimationAction<'a> {
+pub struct AnimationResult<'a> {
     pub name: &'a str,
     pub args: Vec<&'a str>,
 }
 
-impl<'a> fmt::Display for AnimationAction<'a> {
+impl<'a> fmt::Display for AnimationResult<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "A[{}]({})", self.name, self.args.join(", "))
     }
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Hash, Clone)]
-pub struct Pixel {
-    pub range: PixelRange,
+pub struct Pixel<'a> {
+    pub range: PixelRange<'a>,
     pub channel_values: Vec<PixelColor>,
 }
 
-impl fmt::Display for Pixel {
+impl<'a> fmt::Display for Pixel<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
