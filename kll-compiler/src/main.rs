@@ -1,4 +1,5 @@
 use kll::KllDatastore;
+use std::env;
 use std::fs;
 
 fn main() {
@@ -9,4 +10,7 @@ fn main() {
     println!("{:?}", kll_state);
     let kll_data = KllDatastore::new(&kll_state);
     println!("{:?}", kll_data);
+
+    let outfile = env::current_dir().unwrap().join("generatedKeymap.h");
+    kll::emitters::kiibohd::write(&outfile, &kll_state);
 }

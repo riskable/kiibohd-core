@@ -65,3 +65,6 @@ Cargo.lock
 
 # intellij idea project folder
 .idea
+
+# KLL specific generated files
+generatedKeymap.h
