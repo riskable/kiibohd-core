@@ -8,3 +8,5 @@ edition = "2018"
 pest = { version = "2.1", features = ["pretty-print" ] }
 pest_derive = "2.1"
 pest_consume = "1.0"
+structopt = "0.3"
+enum-utils = "0.1.2"

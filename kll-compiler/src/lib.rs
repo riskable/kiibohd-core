@@ -166,7 +166,7 @@ impl<'a> KllDatastore<'a> {
         };
 
         for scancode in state.scancodes() {
-            dbg!(scancode);
+            //dbg!(scancode);
             if scancode < range.start {
                 range.start = scancode;
             }
