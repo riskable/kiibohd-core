@@ -1,6 +1,5 @@
-use kll::KllDatastore;
+use kll::{Filestore, KllDatastore, KllGroups};
 use std::env;
-use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
 use structopt::StructOpt;
@@ -75,25 +74,45 @@ struct KiibohdOpts {
 
 fn main() {
     let args = CliOpts::from_args();
+    if args.debug {
+        println!("=== ARGS === \n{:#?}", &args);
+    }
+
+    let mut filestore = Filestore::new();
+    for file in args
+        .config
+        .iter()
+        .chain(&args.base)
+        .chain(&args.default)
+        .chain(&args.partial)
+    {
+        filestore.load_file(file);
+    }
+
+    let groups = KllGroups::new(
+        &filestore,
+        &args.config,
+        &args.base,
+        &args.default,
+        &args.partial,
+    );
+    if args.debug {
+        println!("=== CONFIG  === \n{:#?}", groups.config());
+        println!("=== DEFAULT === \n{:#?}", groups.defaultmap());
+        println!("=== PARTIAL === \n{:#?}", groups.partialmaps());
+    }
+
     let emitter = EmitterType::from_str(&args.emitter).unwrap();
-
-    let file = fs::read_to_string("test.kll").expect("cannot read file");
-    let kll = kll::parse(&file).unwrap();
-    if args.debug {
-        println!("{}", kll);
-    }
-
-    let kll_state = kll.into_struct();
-    if args.debug {
-        println!("{:?}", kll_state);
-        let kll_data = KllDatastore::new(&kll_state);
-        println!("{:?}", kll_data);
-    }
-
     match emitter {
         EmitterType::Kiibohd => {
+            if args.debug {
+                let defaultmap = groups.defaultmap();
+                let kll_data = KllDatastore::new(&defaultmap);
+                println!("{:?}", kll_data);
+            }
+
             let outfile = env::current_dir().unwrap().join("generatedKeymap.h");
-            kll::emitters::kiibohd::write(&outfile, &kll_state);
+            kll::emitters::kiibohd::write(&outfile, &groups);
             println!("Wrote {:?}", outfile);
         }
         _ => {}

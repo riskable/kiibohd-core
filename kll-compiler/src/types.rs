@@ -85,21 +85,21 @@ impl<'a> fmt::Display for Statement<'a> {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Merge)]
 pub struct Position {
-    pub x: usize,  // mm
-    pub y: usize,  // mm
-    pub z: usize,  // mm
-    pub rx: usize, // deg
-    pub ry: usize, // deg
-    pub rz: usize, // deg
+    pub x: f32,  // mm
+    pub y: f32,  // mm
+    pub z: f32,  // mm
+    pub rx: f32, // deg
+    pub ry: f32, // deg
+    pub rz: f32, // deg
 }
 
 impl Position {
     pub fn from_map(map: Map) -> Self {
         let mut pos = Position::default();
         for (k, v) in map.iter() {
-            let v = v.parse::<usize>().unwrap();
+            let v = v.parse::<f32>().unwrap();
             match *k {
                 "x" => pos.x = v,
                 "y" => pos.y = v,
@@ -117,30 +117,31 @@ impl Position {
 
 impl<'a> fmt::Display for Position {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.x != 0 {
+        if self.x != 0. {
             write!(f, "x:{}", self.x)?;
         }
-        if self.y != 0 {
+        if self.y != 0. {
             write!(f, "y:{}", self.y)?;
         }
-        if self.z != 0 {
+        if self.z != 0. {
             write!(f, "z:{}", self.z)?;
         }
-        if self.rx != 0 {
+        if self.rx != 0. {
             write!(f, "x:{}", self.rx)?;
         }
-        if self.ry != 0 {
+        if self.ry != 0. {
             write!(f, "y:{}", self.ry)?;
         }
-        if self.rz != 0 {
+        if self.rz != 0. {
             write!(f, "z:{}", self.rz)?;
         }
         Ok(())
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Merge)]
 pub struct PixelDef {
+    #[combine]
     pub channels: Vec<(usize, usize)>,
     pub scancode: Option<usize>,
 }

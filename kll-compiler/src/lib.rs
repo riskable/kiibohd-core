@@ -3,11 +3,16 @@ pub mod parser;
 mod test;
 pub mod types;
 
+#[macro_use]
+extern crate derive_object_merge;
+
+use object_merge::Merge;
 use parser::PestError;
 use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::ops::Range;
 use std::path::PathBuf;
-use types::{
+pub use types::{
     Action, Animation, AnimationResult, Capability, Key, KllFile, PixelDef, Position, ResultType,
     Statement, Trigger, TriggerMode, TriggerType,
 };
@@ -18,14 +23,21 @@ pub enum Value<'a> {
     Single(&'a str),
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Merge)]
 pub struct KllState<'a> {
+    #[combine]
     pub defines: HashMap<&'a str, &'a str>,
+    #[combine]
     pub variables: HashMap<&'a str, Value<'a>>,
+    #[combine]
     pub capabilities: HashMap<&'a str, Capability<'a>>,
+    #[combine]
     pub keymap: Vec<(Vec<Vec<Trigger<'a>>>, TriggerMode, Vec<Vec<Action<'a>>>)>,
+    #[combine]
     pub positions: HashMap<usize, Position>,
+    #[combine]
     pub pixelmap: HashMap<usize, PixelDef>,
+    #[combine]
     pub animations: HashMap<&'a str, Animation<'a>>,
 }
 
@@ -166,7 +178,6 @@ impl<'a> KllDatastore<'a> {
         };
 
         for scancode in state.scancodes() {
-            //dbg!(scancode);
             if scancode < range.start {
                 range.start = scancode;
             }
@@ -175,7 +186,11 @@ impl<'a> KllDatastore<'a> {
             }
         }
 
-        assert!(range.start < range.end);
+        if range.start == 0xFFFF {
+            range.start = 0; // No keys found
+        }
+
+        assert!(range.start <= range.end);
         range
     }
 
@@ -192,4 +207,88 @@ impl<'a> KllDatastore<'a> {
 
 pub fn parse(text: &str) -> Result<KllFile, PestError> {
     KllFile::from_str(text)
+}
+
+// Holds owned version of all files
+// All other data structures are borrowed from this
+pub struct Filestore {
+    files: HashMap<PathBuf, String>,
+}
+
+impl Filestore {
+    pub fn new() -> Self {
+        Filestore {
+            files: HashMap::new(),
+        }
+    }
+    pub fn load_file(&mut self, path: &PathBuf) {
+        //dbg!(&path);
+        let raw_text = fs::read_to_string(path).expect("cannot read file");
+        self.files.insert(path.clone(), raw_text);
+    }
+
+    pub fn get_file<'a>(&'a self, path: &PathBuf) -> KllState<'a> {
+        let raw_text = self.files.get(path).unwrap();
+        parse(&raw_text).unwrap().into_struct()
+    }
+}
+
+#[derive(Debug)]
+pub struct KllGroups<'a> {
+    config: Vec<KllState<'a>>,
+    base: Vec<KllState<'a>>,
+    default: Vec<KllState<'a>>,
+    partials: Vec<KllState<'a>>,
+}
+
+impl<'a> KllGroups<'a> {
+    pub fn new(
+        filestore: &'a Filestore,
+        config: &[PathBuf],
+        base: &[PathBuf],
+        default: &[PathBuf],
+        partials: &[PathBuf],
+    ) -> Self {
+        KllGroups {
+            config: config.iter().map(|p| filestore.get_file(p)).collect(),
+            base: base.iter().map(|p| filestore.get_file(p)).collect(),
+            default: default.iter().map(|p| filestore.get_file(p)).collect(),
+            partials: partials.iter().map(|p| filestore.get_file(p)).collect(),
+        }
+    }
+
+    pub fn config(&self) -> KllState<'a> {
+        let mut configs = self.config.iter();
+        let mut config = configs.next().unwrap().clone();
+        for c in configs {
+            config.merge(&c);
+        }
+        config
+    }
+
+    pub fn basemap(&self) -> KllState<'a> {
+        let mut layouts = self.base.iter();
+        let mut layout = layouts.next().unwrap().clone();
+        for base in layouts {
+            layout.merge(&base);
+        }
+        layout
+    }
+    pub fn defaultmap(&self) -> KllState<'a> {
+        let mut layout = self.basemap();
+        for default in &self.default {
+            layout.merge(default);
+        }
+        layout
+    }
+    pub fn partialmaps(&self) -> Vec<KllState<'a>> {
+        let mut partials: Vec<KllState> = vec![];
+        for partial in &self.partials {
+            let mut layout = self.basemap();
+            layout.merge(&partial);
+            partials.push(layout);
+        }
+
+        partials
+    }
 }
