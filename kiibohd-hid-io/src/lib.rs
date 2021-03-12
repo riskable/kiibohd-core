@@ -176,6 +176,7 @@ pub enum HidioStatus {
 pub struct HidioConfig {
     device_name: *const c_char,
     device_serial_number: *const c_char,
+    device_version: *const c_char,
     device_mcu: *const c_char,
     firmware_version: *const c_char,
     firmware_vendor: *const c_char,
@@ -740,8 +741,8 @@ where
             tx_bytebuf,
             serial_buf,
             config,
-            error_str,
             hostinfo,
+            error_str,
             os_version,
             host_software_name,
             term_out_buffer,
@@ -997,6 +998,13 @@ where
             Property::DeviceSerialNumber => {
                 unsafe {
                     if let Ok(cstr) = CStr::from_ptr(self.config.device_serial_number).to_str() {
+                        string = String::from(cstr);
+                    }
+                };
+            }
+            Property::DeviceVersion => {
+                unsafe {
+                    if let Ok(cstr) = CStr::from_ptr(self.config.device_version).to_str() {
                         string = String::from(cstr);
                     }
                 };

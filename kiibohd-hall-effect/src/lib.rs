@@ -104,7 +104,7 @@ impl SenseAnalysis {
             }
         };
         let distance = initial_distance - distance_offset;
-        let velocity = (distance - data.analysis.distance) / 1;
+        let velocity = distance - data.analysis.distance; // / 1
         let acceleration = (velocity - data.analysis.velocity) / 2;
         // NOTE: To use jerk, the compile-time thresholds will need to be
         //       multiplied by 3 (to account for the missing / 3)

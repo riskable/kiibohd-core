@@ -76,7 +76,6 @@ pub extern "C" fn he_init() -> HeStatus {
 /// This should be the raw value from the ADC
 /// Once enough values have been accumulated, data analysis is done
 /// automatically
-/// TODO
 #[no_mangle]
 pub extern "C" fn he_scan_event(index: u16, val: u16, analysis: *mut SenseAnalysis) -> HeStatus {
     unsafe {
