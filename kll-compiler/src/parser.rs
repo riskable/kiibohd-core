@@ -175,15 +175,15 @@ impl KLLParser {
     }
     fn usbcode(input: Node) -> Result<Key> {
         let usbcode = input.as_str().strip_prefix("U").unwrap();
-        Ok(Key::Usb(usbcode))
+        Ok(Key::Usb(usbcode.trim_matches('"')))
     }
     fn consumer(input: Node) -> Result<Key> {
         let concode = input.as_str().strip_prefix("CONS").unwrap();
-        Ok(Key::Consumer(concode))
+        Ok(Key::Consumer(concode.trim_matches('"')))
     }
     fn system(input: Node) -> Result<Key> {
         let syscode = input.as_str().strip_prefix("SYS").unwrap();
-        Ok(Key::System(syscode))
+        Ok(Key::System(syscode.trim_matches('"')))
     }
     fn none(_input: Node) -> Result<&str> {
         Ok("None")
@@ -316,7 +316,7 @@ impl KLLParser {
     }
     fn mapping(input: Node) -> Result<Statement> {
         Ok(match_nodes!(input.into_children();
-            [triggers(triggers), binding(mode), results(results)] => Statement::Keymap((triggers, mode, results)),
+            [triggers(triggers), binding(mode), results(results)] => Statement::Keymap(Mapping(TriggerList(triggers), mode, ResultList(results))),
         ))
     }
     fn position(input: Node) -> Result<Statement> {

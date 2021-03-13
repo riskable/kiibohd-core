@@ -23,11 +23,74 @@ pub fn maybe_quote(text: &str) -> String {
 }
 
 #[derive(Debug, Clone)]
+pub struct Mapping<'a>(pub TriggerList<'a>, pub TriggerMode, pub ResultList<'a>);
+
+impl<'a> fmt::Display for Mapping<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {} {}", self.0, self.1, self.2)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TriggerList<'a>(pub Vec<Vec<Trigger<'a>>>);
+
+impl<'a> TriggerList<'a> {
+    pub fn iter(&self) -> impl Iterator<Item = &Trigger> + '_ {
+        self.0.iter().flatten()
+    }
+}
+
+impl<'a> fmt::Display for TriggerList<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.0
+                .iter()
+                .map(|combo| combo
+                    .iter()
+                    .map(|t| format!("{}", t))
+                    .collect::<Vec<_>>()
+                    .join(" + "))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ResultList<'a>(pub Vec<Vec<Action<'a>>>);
+
+impl<'a> ResultList<'a> {
+    pub fn iter(&self) -> impl Iterator<Item = &Action> + '_ {
+        self.0.iter().flatten()
+    }
+}
+
+impl<'a> fmt::Display for ResultList<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.0
+                .iter()
+                .map(|combo| combo
+                    .iter()
+                    .map(|t| format!("{}", t))
+                    .collect::<Vec<_>>()
+                    .join(" + "))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Statement<'a> {
     Define((&'a str, &'a str)),
     Variable((&'a str, Option<usize>, &'a str)),
     Capability((&'a str, Capability<'a>)),
-    Keymap((Vec<Vec<Trigger<'a>>>, TriggerMode, Vec<Vec<Action<'a>>>)),
+    Keymap(Mapping<'a>),
     Position((Indices, Position)),
     Pixelmap((Indices, PixelDef)),
     Animation((&'a str, Animation<'a>)),
@@ -53,9 +116,7 @@ impl<'a> fmt::Display for Statement<'a> {
                 }
             }
             Self::Capability((name, cap)) => write!(f, "{} = {};", name, cap),
-            Self::Keymap((triggers, varient, actions)) => {
-                write!(f, "{:?} {} {:?};", triggers, varient, actions)
-            }
+            Self::Keymap(mapping) => write!(f, "{};", mapping),
             Self::Position((indices, pos)) => {
                 write!(f, "P[{}] <= {};", format_indices(indices), pos)
             }
@@ -174,9 +235,24 @@ pub struct Capability<'a> {
     pub args: Vec<&'a str>,
 }
 
+impl<'a> Capability<'a> {
+    pub fn new(function: &'a str, args: Vec<&'a str>) -> Self {
+        Capability { function, args }
+    }
+}
+
 impl<'a> fmt::Display for Capability<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}({:?})", self.function, self.args)
+        write!(
+            f,
+            "{}({:?})",
+            self.function,
+            self.args
+                .iter()
+                .map(|arg| arg.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
     }
 }
 
@@ -404,9 +480,9 @@ impl<'a> fmt::Display for Key<'a> {
         match self {
             Key::Scancode(num) => write!(f, "S{}", num),
             Key::Char(num) => write!(f, "'{}'", num),
-            Key::Usb(name) => write!(f, "U{}", name),
-            Key::Consumer(name) => write!(f, "CONS{}", name),
-            Key::System(name) => write!(f, "SYS{}", name),
+            Key::Usb(name) => write!(f, "U\"{}\"", name),
+            Key::Consumer(name) => write!(f, "CONS\"{}\"", name),
+            Key::System(name) => write!(f, "SYS\"{}\"", name),
             Key::Unicode(name) => write!(f, "U+{}", name),
             Key::None => write!(f, "None"),
         }

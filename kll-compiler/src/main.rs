@@ -1,4 +1,5 @@
 use kll::{Filestore, KllDatastore, KllGroups};
+//use layouts::Layouts;
 use std::env;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -105,8 +106,17 @@ fn main() {
     let emitter = EmitterType::from_str(&args.emitter).unwrap();
     match emitter {
         EmitterType::Kiibohd => {
+            //let mut layouts = Layouts::from_dir(PathBuf::from("layouts"));
+            //let layout = layouts.get_layout("base/base.json");
+            //dbg!(&layout.from_hid_keyboard);
+
+            let mut defaultmap = groups.defaultmap();
+            defaultmap.keymap = defaultmap.reduce(groups.basemap());
+            for s in &defaultmap.keymap {
+                println!("{}", s);
+            }
+
             if args.debug {
-                let defaultmap = groups.defaultmap();
                 let kll_data = KllDatastore::new(&defaultmap);
                 println!("{:?}", kll_data);
             }

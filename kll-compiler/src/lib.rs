@@ -1,3 +1,6 @@
+#![feature(if_let_guard)]
+#![allow(incomplete_features)]
+
 pub mod emitters;
 pub mod parser;
 mod test;
@@ -7,14 +10,15 @@ pub mod types;
 extern crate derive_object_merge;
 
 use object_merge::Merge;
+pub use parser::parse_int;
 use parser::PestError;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::ops::Range;
 use std::path::PathBuf;
 pub use types::{
-    Action, Animation, AnimationResult, Capability, Key, KllFile, PixelDef, Position, ResultType,
-    Statement, Trigger, TriggerMode, TriggerType,
+    Action, Animation, AnimationResult, Capability, Key, KllFile, Mapping, PixelDef, Position,
+    ResultList, ResultType, Statement, Trigger, TriggerList, TriggerMode, TriggerType,
 };
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -32,7 +36,7 @@ pub struct KllState<'a> {
     #[combine]
     pub capabilities: HashMap<&'a str, Capability<'a>>,
     #[combine]
-    pub keymap: Vec<(Vec<Vec<Trigger<'a>>>, TriggerMode, Vec<Vec<Action<'a>>>)>,
+    pub keymap: Vec<Mapping<'a>>,
     #[combine]
     pub positions: HashMap<usize, Position>,
     #[combine]
@@ -70,8 +74,8 @@ impl<'a> KllFile<'a> {
                 Statement::Capability((name, cap)) => {
                     kll.capabilities.insert(name, cap);
                 }
-                Statement::Keymap((triggers, varient, actions)) => {
-                    kll.keymap.push((triggers, varient, actions));
+                Statement::Keymap(mapping) => {
+                    kll.keymap.push(mapping);
                 }
                 Statement::Position((indices, pos)) => {
                     for range in indices {
@@ -115,8 +119,8 @@ impl<'a> KllState<'a> {
         let groups = self
             .keymap
             .iter()
-            .map(|(trigger_groups, _, _)| trigger_groups);
-        let combos: Vec<_> = groups.into_iter().flatten().collect();
+            .map(|Mapping(trigger_groups, _, _)| trigger_groups);
+        let combos = groups.into_iter().map(|tl| tl.iter());
         let triggers = combos.into_iter().flatten();
         triggers
     }
@@ -125,10 +129,23 @@ impl<'a> KllState<'a> {
         let groups = self
             .keymap
             .iter()
-            .map(|(_, _, result_groups)| result_groups);
-        let combos: Vec<_> = groups.into_iter().flatten().collect();
+            .map(|Mapping(_, _, result_groups)| result_groups);
+        let combos = groups.into_iter().map(|rl| rl.iter());
         let actions = combos.into_iter().flatten();
         actions
+    }
+
+    pub fn scancode_map(&self) -> HashMap<&str, usize> {
+        self.keymap
+            .iter()
+            .filter_map(|Mapping(trigger_groups, _, result_groups)| match 1 {
+                _ if trigger_groups.iter().count() == 1 && result_groups.iter().count() == 1 => match 1 {
+                    _ if let (TriggerType::Key(Key::Scancode(s)), ResultType::Output(Key::Usb(u))) = (&trigger_groups.iter().next().unwrap().trigger, &result_groups.iter().next().unwrap().result)  => Some((*u, *s)),
+                    _ => None,
+                },
+                _ => None
+            })
+        .collect::<HashMap<&str, usize>>()
     }
 
     pub fn scancodes(&self) -> Vec<usize> {
@@ -158,6 +175,70 @@ impl<'a> KllState<'a> {
                 _ => None,
             })
             .collect()
+    }
+
+    pub fn reduce(&self, base: KllState<'a>) -> Vec<Mapping<'a>> {
+        let scancode_map = base.scancode_map();
+        let mut new_keymap: Vec<Mapping> = self
+            .keymap
+            .iter()
+            .map(|Mapping(trigger_groups, mode, result_groups)| {
+                let new_triggers = TriggerList(match mode {
+                    TriggerMode::SoftReplace => trigger_groups.0.clone(),
+                    _ => trigger_groups
+                        .0
+                        .iter()
+                        .map(|combo| {
+                            combo
+                                .iter()
+                                .map(|t| match &t.trigger {
+                                    TriggerType::Key(Key::Usb(u)) => {
+                                        let s = scancode_map.get(u).unwrap();
+                                        Trigger {
+                                            trigger: TriggerType::Key(Key::Scancode(*s)),
+                                            state: t.state.clone(),
+                                        }
+                                    }
+                                    _ => t.clone(),
+                                })
+                                .collect::<Vec<_>>()
+                        })
+                        .collect::<Vec<_>>(),
+                });
+                let new_results = ResultList(match mode {
+                    TriggerMode::SoftReplace => result_groups.0.clone(),
+                    _ => result_groups
+                        .0
+                        .iter()
+                        .map(|combo| {
+                            combo
+                                .iter()
+                                .map(|r| match &r.result {
+                                    ResultType::Output(Key::Usb(u)) => Action {
+                                        result: ResultType::Capability((
+                                            Capability::new("usbKeyOut", vec![u]),
+                                            None,
+                                        )),
+                                        state: r.state.clone(),
+                                    },
+                                    _ => r.clone(),
+                                })
+                                .collect::<Vec<_>>()
+                        })
+                        .collect::<Vec<_>>(),
+                });
+
+                Mapping(new_triggers, mode.clone(), new_results)
+            })
+            .collect::<Vec<_>>();
+
+        new_keymap.sort_by(|a, b| {
+            let a = format!("{}", a);
+            let b = format!("{}", b);
+            alphanumeric_sort::compare_path(a, b)
+        });
+
+        new_keymap
     }
 }
 
