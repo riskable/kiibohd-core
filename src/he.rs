@@ -23,15 +23,59 @@
 
 // ----- Crates -----
 
-use heapless::consts::{U10, U115, U2, U4096};
-use kiibohd_hall_effect::{CalibrationStatus, SenseAnalysis, SenseData, SensorError, Sensors};
+use heapless::consts::{U1000, U115, U2, U300, U4096};
+use typenum::{UInt, UTerm, B0, B1};
+
+pub use kiibohd_hall_effect::{
+    CalibrationStatus, SenseAnalysis, SenseData, SenseStats, SensorError, Sensors,
+};
 
 // ----- Types -----
 
 type NumScanCodes = U115;
-type MaxAdc = U4096;
-type MagnetBounds = U10; // TODO This needs to be calculated
 type SenseAccumulation = U2;
+
+// --- NOTE ---
+// These thresholds were calculated on a Keystone v1.00 TKL pcb
+
+// Normal Mode Thresholds
+type MaxAdc = U4096;
+type MinMagnetThreshold = U300; // Lower than this value, the sensor will go back into calibration mode
+
+// Calibration Mode Thresholds
+type MinOkThreshold = UInt<
+    UInt<
+        UInt<
+            UInt<
+                UInt<
+                    UInt<UInt<UInt<UInt<UInt<UInt<UInt<UTerm, B1>, B0>, B0>, B1>, B1>, B1>, B0>,
+                    B0,
+                >,
+                B0,
+            >,
+            B1,
+        >,
+        B0,
+    >,
+    B0,
+>; // U2500 - b100111000100 - Switch not pressed
+type MaxOkThreshold = UInt<
+    UInt<
+        UInt<
+            UInt<
+                UInt<
+                    UInt<UInt<UInt<UInt<UInt<UInt<UInt<UTerm, B1>, B1>, B0>, B0>, B1>, B0>, B0>,
+                    B0,
+                >,
+                B0,
+            >,
+            B0,
+        >,
+        B0,
+    >,
+    B0,
+>; // U3200 - b110010000000 Switch not pressed
+type NoSensorThreshold = U1000; // Likely invalid ADC level from non-existent sensor (or very low magnet)
 
 // ----- Globals -----
 
@@ -50,8 +94,11 @@ pub enum HeStatus {
     AnalysisReady,
     ErrorInvalidIndex,
     ErrorInvalidReading,
+    ErrorMagnetTooStrong,
+    ErrorMagnetTooWeak,
+    ErrorMagnetWrongPoleOrMissing,
     ErrorNotInitialized,
-    ErrorSensorDetectedNoMagnet,
+    ErrorSensorBroken,
     ErrorSensorMissing,
     ErrorSensorNotReady,
     ErrorUnknown,
@@ -76,18 +123,22 @@ pub extern "C" fn he_init() -> HeStatus {
 /// This should be the raw value from the ADC
 /// Once enough values have been accumulated, data analysis is done
 /// automatically
+/// # Safety
 #[no_mangle]
-pub extern "C" fn he_scan_event(index: u16, val: u16, analysis: *mut SenseAnalysis) -> HeStatus {
-    unsafe {
-        // Retrieve interface
-        let intf = match INTF.as_mut() {
-            Some(intf) => intf,
-            None => {
-                return HeStatus::ErrorNotInitialized;
-            }
-        };
+pub unsafe extern "C" fn he_scan_event(
+    index: u16,
+    val: u16,
+    analysis: *mut SenseAnalysis,
+) -> HeStatus {
+    // Retrieve interface
+    let intf = match INTF.as_mut() {
+        Some(intf) => intf,
+        None => {
+            return HeStatus::ErrorNotInitialized;
+        }
+    };
 
-        match intf.add::<SenseAccumulation, MaxAdc, MagnetBounds>(index as usize, val) {
+    match intf.add::<SenseAccumulation, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(index as usize, val) {
             Ok(data) => {
                 if let Some(data) = data {
                     *analysis = data.clone();
@@ -98,37 +149,77 @@ pub extern "C" fn he_scan_event(index: u16, val: u16, analysis: *mut SenseAnalys
             }
             Err(err) => match err {
                 SensorError::CalibrationError(data) => match data.cal {
+                    CalibrationStatus::MagnetTooStrong => HeStatus::ErrorMagnetTooStrong,
+                    CalibrationStatus::MagnetTooWeak => HeStatus::ErrorMagnetTooWeak,
+                    CalibrationStatus::MagnetWrongPoleOrMissing => HeStatus::ErrorMagnetWrongPoleOrMissing,
                     CalibrationStatus::NotReady => HeStatus::ErrorSensorNotReady,
-                    CalibrationStatus::SensorDetected => HeStatus::ErrorSensorDetectedNoMagnet,
+                    CalibrationStatus::SensorBroken => HeStatus::ErrorSensorBroken,
                     CalibrationStatus::SensorMissing => HeStatus::ErrorSensorMissing,
-                    CalibrationStatus::InvalidReading => HeStatus::ErrorInvalidReading,
                     _ => HeStatus::ErrorUnknown,
                 },
                 SensorError::InvalidSensor(_) => HeStatus::ErrorInvalidIndex,
                 _ => HeStatus::ErrorUnknown,
             },
         }
-    }
 }
 
-/// Retrieve calibration data
+/// Retrieve calibration status
 #[no_mangle]
-pub extern "C" fn he_calibration(index: u16, data: *mut SenseData) -> HeStatus {
+pub extern "C" fn he_calibration(index: u16) -> CalibrationStatus {
     unsafe {
         // Retrieve interface
         let intf = match INTF.as_mut() {
             Some(intf) => intf,
             None => {
-                return HeStatus::ErrorNotInitialized;
+                return CalibrationStatus::NotReady;
             }
         };
 
         match intf.get_data(index as usize) {
-            Ok(results) => {
-                *data = results.clone();
-                HeStatus::Success
-            }
-            Err(_) => HeStatus::ErrorInvalidIndex,
+            Ok(results) => results.cal.clone(),
+            Err(_) => CalibrationStatus::InvalidIndex,
         }
+    }
+}
+
+/// Retrieve analysis data
+/// # Safety
+#[no_mangle]
+pub unsafe extern "C" fn he_analysis(index: u16, analysis: *mut SenseAnalysis) -> HeStatus {
+    // Retrieve interface
+    let intf = match INTF.as_mut() {
+        Some(intf) => intf,
+        None => {
+            return HeStatus::ErrorNotInitialized;
+        }
+    };
+
+    match intf.get_data(index as usize) {
+        Ok(results) => {
+            *analysis = results.analysis.clone();
+            HeStatus::Success
+        }
+        Err(_) => HeStatus::ErrorInvalidIndex,
+    }
+}
+
+/// Retrieve stats data
+/// # Safety
+#[no_mangle]
+pub unsafe extern "C" fn he_stats(index: u16, stats: *mut SenseStats) -> HeStatus {
+    // Retrieve interface
+    let intf = match INTF.as_mut() {
+        Some(intf) => intf,
+        None => {
+            return HeStatus::ErrorNotInitialized;
+        }
+    };
+
+    match intf.get_data(index as usize) {
+        Ok(results) => {
+            *stats = results.stats.clone();
+            HeStatus::Success
+        }
+        Err(_) => HeStatus::ErrorInvalidIndex,
     }
 }

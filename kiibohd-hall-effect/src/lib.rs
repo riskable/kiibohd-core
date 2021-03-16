@@ -42,15 +42,14 @@ use rawlookup::MODEL;
 #[repr(C)]
 #[derive(Clone, Debug, PartialEq)]
 pub enum CalibrationStatus {
-    NotReady,       // Still trying to determine status (from power-on)
-    SensorDetected, // Sensor detected, but no magnet
-    // ADC value 50% of max
-    SensorMissing, // ADC value at 0
-    // Generally this is not possible with a magnet
-    // unless the magnet is far to strong.
-    MagnetDetectedPositive, // Magnet detected, min calibrated, positive range
-    MagnetDetectedNegative, // Magnet detected, max calibrated, negative range
-    InvalidReading,         // Reading higher than ADC supports (invalid)
+    NotReady = 0,                 // Still trying to determine status (from power-on)
+    SensorMissing = 1,            // ADC value at 0
+    SensorBroken = 2, // Reading higher than ADC supports (invalid), or magnet is too strong
+    MagnetDetected = 3, // Magnet detected, min calibrated, positive range
+    MagnetWrongPoleOrMissing = 4, // Magnet detected, wrong pole direction
+    MagnetTooStrong = 5, // Magnet overpowers sensor
+    MagnetTooWeak = 6, // Magnet not strong enough (or removed)
+    InvalidIndex = 7, // Invalid index
 }
 
 #[derive(Clone, Debug)]
@@ -80,23 +79,17 @@ pub struct SenseAnalysis {
 impl SenseAnalysis {
     /// Using the raw value do calculations
     /// Requires the previous analysis
-    fn new(raw: u16, data: &SenseData) -> SenseAnalysis {
+    pub fn new(raw: u16, data: &SenseData) -> SenseAnalysis {
         // Do raw lookup (we've already checked the bounds)
         let initial_distance = MODEL[raw as usize];
 
         // Min/max adjustment
         let distance_offset = match data.cal {
-            CalibrationStatus::MagnetDetectedPositive => {
+            CalibrationStatus::MagnetDetected => {
                 // Subtract the min lookup
                 // Lookup table has negative values for unexpectedly
                 // small values (greater than sensor center)
-                MODEL[data.min as usize]
-            }
-            CalibrationStatus::MagnetDetectedNegative => {
-                // Subtract the max lookup
-                // Lookup table has negative values for unexpectedly
-                // small values (greater than sensor center)
-                MODEL[data.max as usize]
+                MODEL[data.stats.min as usize]
             }
             _ => {
                 // Invalid reading
@@ -119,7 +112,7 @@ impl SenseAnalysis {
     }
 
     /// Null entry
-    fn null() -> SenseAnalysis {
+    pub fn null() -> SenseAnalysis {
         SenseAnalysis {
             raw: 0,
             distance: 0,
@@ -172,6 +165,31 @@ impl RawData {
     }
 }
 
+/// Sense stats include statistically information about the sensor data
+#[repr(C)]
+#[derive(Clone, Debug)]
+pub struct SenseStats {
+    pub min: u16,     // Minimum raw value (reset when out of calibration)
+    pub max: u16,     // Maximum raw value (reset when out of calibration)
+    pub samples: u32, // Total number of samples (does not reset)
+}
+
+impl SenseStats {
+    fn new() -> SenseStats {
+        SenseStats {
+            min: 0xFFFF,
+            max: 0x0000,
+            samples: 0,
+        }
+    }
+
+    /// Reset, resettable stats (e.g. min, max, but not samples)
+    fn reset(&mut self) {
+        self.min = 0xFFFF;
+        self.max = 0x0000;
+    }
+}
+
 /// Sense data is store per ADC source element (e.g. per key)
 /// The analysis is stored in a queue, where old values expire out
 /// min/max is used to handle offsets from the distance lookups
@@ -206,24 +224,33 @@ impl RawData {
 /// NOTE: Division is computed at compile time for jerk (/ 3)
 ///
 /// Time is simplified to 1 unit (normally sampling will be at a constant time-rate, so this should be somewhat accurate).
-#[repr(C)]
+///
+/// A variety of thresholds are used during calibration and normal operating modes.
+/// These values are generics as there's no reason to store each of the thresholds at runtime for
+/// each sensor (wastes precious sram per sensor).
+///
+/// Normal Mode:
+/// * MMT: Min Magnet Threshold (any lower and calibration is reset)
+/// * MX:  Max sensor value
+/// Calibration Mode:
+/// * MNOK: Min valid calibration (Wrong magnet direction; wrong pole, less than a specific value)
+/// * MXOK: Max valid calibration (Bad Sensor threshold; sensor is bad if reading is higher than this value)
+/// * NS: No sensor detected (less than a specific value)
 #[derive(Clone, Debug)]
 pub struct SenseData {
     pub analysis: SenseAnalysis,
     pub cal: CalibrationStatus,
     pub data: RawData,
-    pub min: u16,
-    pub max: u16,
+    pub stats: SenseStats,
 }
 
 impl SenseData {
-    fn new() -> SenseData {
+    pub fn new() -> SenseData {
         SenseData {
             analysis: SenseAnalysis::null(),
             cal: CalibrationStatus::NotReady,
             data: RawData::new(),
-            min: 0xFFFF,
-            max: 0x0000,
+            stats: SenseStats::new(),
         }
     }
 
@@ -231,35 +258,41 @@ impl SenseData {
     /// Once the required number of samples is retrieved, do analysis
     /// Analysis does a few more addition, subtraction and comparisions
     /// so it's a more expensive operation.
-    fn add<SC: Unsigned, MX: Unsigned, RNG: Unsigned>(
+    fn add<
+        SC: Unsigned,
+        MMT: Unsigned,
+        MX: Unsigned,
+        MNOK: Unsigned,
+        MXOK: Unsigned,
+        NS: Unsigned,
+    >(
         &mut self,
         reading: u16,
     ) -> Result<Option<&SenseAnalysis>, SensorError> {
         // Add value to accumulator
         if let Some(data) = self.data.add::<SC>(reading) {
             // Check min/max values
-            if data > self.max {
-                self.max = data;
+            if data > self.stats.max {
+                self.stats.max = data;
             }
-            if data < self.min {
-                self.min = data;
+            if data < self.stats.min {
+                self.stats.min = data;
             }
 
             // Check calibration
-            self.cal = self.check_calibration::<MX, RNG>(data);
+            self.cal = self.check_calibration::<MMT, MX, MNOK, MXOK, NS>(data);
             trace!("Reading: {}  Cal: {:?}", reading, self.cal);
             match self.cal {
+                CalibrationStatus::MagnetDetected => {}
                 // Don't bother doing calculations if magnet+sensor isn't ready
-                CalibrationStatus::NotReady
-                | CalibrationStatus::InvalidReading
-                | CalibrationStatus::SensorDetected
-                | CalibrationStatus::SensorMissing => {
+                _ => {
                     // Reset min/max
-                    self.min = 0xFFFF;
-                    self.max = 0x0000;
+                    self.stats.reset();
+                    // Clear analysis, only set raw
+                    self.analysis = SenseAnalysis::null();
+                    self.analysis.raw = data;
                     return Err(SensorError::CalibrationError(self.clone()));
                 }
-                _ => {}
             }
 
             // Calculate new analysis (requires previous results + min/max)
@@ -271,38 +304,62 @@ impl SenseData {
     }
 
     /// Update calibration state
-    /// MX:  Max sensor value
-    /// RNG: +/- center threshold for magnet detection (Range Magnet)
-    fn check_calibration<MX: Unsigned, RNG: Unsigned>(&self, data: u16) -> CalibrationStatus {
-        // TODO(HaaTa): Should we force full recalibration periodically?
-        //              (drop min/max values)
-        let lowmid = <MX>::U16 / 2 - <RNG>::U16; // Middle - range
-        let highmid = <MX>::U16 / 2 + <RNG>::U16; // Middle + range
+    /// Calibration is different depending on whether or not we've already been successfully
+    /// calibrated. Gain and offset are set differently depending on whether the sensor has been
+    /// calibrated. Uncalibrated sensors run at a lower gain to gather more details around voltage
+    /// limits. Wherease calibrated sensors run at higher gain (and likely an offset) to maximize
+    /// the voltage range of the desired sensor range.
+    /// NOTE: This implementation (currently) only works for a single magnet pole of a bipolar sensor.
+    fn check_calibration<
+        MMT: Unsigned,
+        MX: Unsigned,
+        MNOK: Unsigned,
+        MXOK: Unsigned,
+        NS: Unsigned,
+    >(
+        &self,
+        data: u16,
+    ) -> CalibrationStatus {
+        // Determine calibration state
+        match self.cal {
+            // Normal Mode
+            CalibrationStatus::MagnetDetected => {
+                // Determine if value is too high/overpowers ADC+Gain (recalibrate)
+                if data >= <MX>::U16 - 1 {
+                    return CalibrationStatus::MagnetTooStrong;
+                }
+                // Determine if value is too low (recalibrate)
+                if data < <MMT>::U16 {
+                    return CalibrationStatus::MagnetTooWeak;
+                }
 
-        // Check if value is invalid
-        if data >= <MX>::U16 - 1 {
-            return CalibrationStatus::InvalidReading;
-        }
+                CalibrationStatus::MagnetDetected
+            }
+            // Calibration Mode
+            _ => {
+                // Value too high, likely a bad sensor or bad soldering on the pcb
+                // Magnet may also be too strong.
+                if data > <MXOK>::U16 {
+                    if self.cal == CalibrationStatus::MagnetTooStrong {
+                        return CalibrationStatus::MagnetTooStrong;
+                    }
+                    return CalibrationStatus::SensorBroken;
+                }
+                // No sensor detected
+                if data < <NS>::U16 {
+                    return CalibrationStatus::SensorMissing;
+                }
+                // Wrong pole (or magnet may be too weak)
+                if data < <MNOK>::U16 {
+                    if self.cal == CalibrationStatus::MagnetTooWeak {
+                        return CalibrationStatus::MagnetTooWeak;
+                    }
+                    return CalibrationStatus::MagnetWrongPoleOrMissing;
+                }
 
-        // No sensor found
-        if data == 0 {
-            return CalibrationStatus::SensorMissing;
+                CalibrationStatus::MagnetDetected
+            }
         }
-
-        // Check if magnet found
-        if data > highmid {
-            return CalibrationStatus::MagnetDetectedPositive;
-        }
-        if data < lowmid {
-            return CalibrationStatus::MagnetDetectedNegative;
-        }
-
-        // Check for sensor, no magnet detected
-        if data <= highmid && data >= lowmid {
-            return CalibrationStatus::SensorDetected;
-        }
-
-        CalibrationStatus::NotReady
     }
 }
 
@@ -330,14 +387,21 @@ impl<S: ArrayLength<SenseData>> Sensors<S> {
         }
     }
 
-    pub fn add<SC: Unsigned, MX: Unsigned, RNG: Unsigned>(
+    pub fn add<
+        SC: Unsigned,
+        MMT: Unsigned,
+        MX: Unsigned,
+        MNOK: Unsigned,
+        MXOK: Unsigned,
+        NS: Unsigned,
+    >(
         &mut self,
         index: usize,
         reading: u16,
     ) -> Result<Option<&SenseAnalysis>, SensorError> {
         trace!("Index: {}  Reading: {}", index, reading);
         if index < self.sensors.len() {
-            self.sensors[index].add::<SC, MX, RNG>(reading)
+            self.sensors[index].add::<SC, MMT, MX, MNOK, MXOK, NS>(reading)
         } else {
             Err(SensorError::InvalidSensor(index))
         }

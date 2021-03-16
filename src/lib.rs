@@ -26,8 +26,8 @@
 
 // ----- Modules -----
 
-mod he;
-mod hidio;
+pub mod he;
+pub mod hidio;
 
 // ----- Embedded Functionality -----
 

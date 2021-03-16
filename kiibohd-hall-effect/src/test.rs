@@ -25,12 +25,52 @@
 
 use super::*;
 use flexi_logger::Logger;
-use heapless::consts::{U1, U10, U2, U4096};
+use heapless::consts::{U1, U1000, U2, U300, U4096};
+use typenum::{UInt, UTerm, B0, B1};
 
 // ----- Types -----
 
+// --- NOTE ---
+// These thresholds were calculated on a Keystone v1.00 TKL pcb
+
+// Normal Mode Thresholds
 type MaxAdc = U4096;
-type MagnetBounds = U10; // TODO This needs to be calculated
+type MinMagnetThreshold = U300; // Lower than this value, the sensor will go back into calibration mode
+
+// Calibration Mode Thresholds
+type MinOkThreshold = UInt<
+    UInt<
+        UInt<
+            UInt<
+                UInt<
+                    UInt<UInt<UInt<UInt<UInt<UInt<UInt<UTerm, B1>, B0>, B0>, B1>, B1>, B1>, B0>,
+                    B0,
+                >,
+                B0,
+            >,
+            B1,
+        >,
+        B0,
+    >,
+    B0,
+>; // U2500 - b100111000100 - Switch not pressed
+type MaxOkThreshold = UInt<
+    UInt<
+        UInt<
+            UInt<
+                UInt<
+                    UInt<UInt<UInt<UInt<UInt<UInt<UInt<UTerm, B1>, B1>, B0>, B0>, B1>, B0>, B0>,
+                    B0,
+                >,
+                B0,
+            >,
+            B0,
+        >,
+        B0,
+    >,
+    B0,
+>; // U3200 - b110010000000 Switch not pressed
+type NoSensorThreshold = U1000; // Likely invalid ADC level from non-existent sensor (or very low magnet)
 
 // ----- Enumerations -----
 
@@ -63,7 +103,11 @@ fn invalid_index() {
     let mut sensors = Sensors::<U1>::new().unwrap();
 
     // Add data to an invalid location
-    assert!(sensors.add::<U1, MaxAdc, MagnetBounds>(1, 0).is_err());
+    assert!(sensors
+        .add::<U1, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(
+            1, 0
+        )
+        .is_err());
 
     // Retrieve data from an invalid location
     assert!(sensors.get_data(1).is_err());
@@ -90,17 +134,100 @@ fn not_ready() {
     assert!(false, "Unexpected state: {:?}", state);
 }
 
-fn no_magnet<U: ArrayLength<SenseData>>(sensors: &mut Sensors<U>) {
-    // Add a sensor value that's exactly half of the total range
+fn no_magnet_calibration<U: ArrayLength<SenseData>>(sensors: &mut Sensors<U>) {
+    // Add a sensor value that's less than MinOkThreshold
     // Once averaging is complete, we'll get a result (1 value)
     assert!(sensors
-        .add::<U2, MaxAdc, MagnetBounds>(0, <MaxAdc>::to_u16() / 2)
+        .add::<U2, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(
+            0,
+            <MinOkThreshold>::to_u16() - 1
+        )
         .is_ok());
-    let state = sensors.add::<U2, MaxAdc, MagnetBounds>(0, <MaxAdc>::to_u16() / 2);
+    let state = sensors
+        .add::<U2, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(
+            0,
+            <MinOkThreshold>::to_u16() - 1,
+        );
 
     match state.clone() {
         Err(SensorError::CalibrationError(data)) => match data.cal {
-            CalibrationStatus::SensorDetected => {
+            CalibrationStatus::MagnetWrongPoleOrMissing => {
+                return;
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+    assert!(false, "Unexpected state: {:?}", state);
+}
+
+fn magnet_weak_normal<U: ArrayLength<SenseData>>(sensors: &mut Sensors<U>) {
+    assert!(sensors
+        .add::<U2, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(
+            0,
+            <MinMagnetThreshold>::to_u16() - 2
+        )
+        .is_ok());
+    let state = sensors
+        .add::<U2, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(
+            0,
+            <MinMagnetThreshold>::to_u16() - 2,
+        );
+
+    match state.clone() {
+        Err(SensorError::CalibrationError(data)) => match data.cal {
+            CalibrationStatus::MagnetTooWeak => {
+                return;
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+    assert!(false, "Unexpected state: {:?}", state);
+}
+
+// Must be called after magnet_weak_normal
+fn magnet_weak_calibration<U: ArrayLength<SenseData>>(sensors: &mut Sensors<U>) {
+    assert!(sensors
+        .add::<U2, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(
+            0,
+            <MinOkThreshold>::to_u16() - 2
+        )
+        .is_ok());
+    let state = sensors
+        .add::<U2, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(
+            0,
+            <MinOkThreshold>::to_u16() - 2,
+        );
+
+    match state.clone() {
+        Err(SensorError::CalibrationError(data)) => match data.cal {
+            CalibrationStatus::MagnetTooWeak => {
+                return;
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+    assert!(false, "Unexpected state: {:?}", state);
+}
+
+fn magnet_strong_normal<U: ArrayLength<SenseData>>(sensors: &mut Sensors<U>) {
+    assert!(sensors
+        .add::<U2, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(
+            0,
+            <MaxAdc>::to_u16()
+        )
+        .is_ok());
+    let state = sensors
+        .add::<U2, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(
+            0,
+            <MaxAdc>::to_u16(),
+        );
+
+    match state.clone() {
+        Err(SensorError::CalibrationError(data)) => match data.cal {
+            CalibrationStatus::MagnetTooStrong => {
                 return;
             }
             _ => {}
@@ -117,7 +244,7 @@ fn sensor_detected() {
     // Allocate a single sensor
     let mut sensors = Sensors::<U1>::new().unwrap();
 
-    no_magnet::<U1>(&mut sensors);
+    no_magnet_calibration::<U1>(&mut sensors);
 }
 
 #[test]
@@ -130,8 +257,17 @@ fn sensor_missing() {
     // Add a sensor value of 0
     // (needs 2 samples to finish averaging)
     // Once averaging is complete, we'll get a result
-    assert!(sensors.add::<U2, MaxAdc, MagnetBounds>(0, 0).is_ok());
-    let state = sensors.add::<U2, MaxAdc, MagnetBounds>(0, 0);
+    assert!(sensors
+        .add::<U2, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(
+            0,
+            <NoSensorThreshold>::to_u16() - 1
+        )
+        .is_ok());
+    let state = sensors
+        .add::<U2, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(
+            0,
+            <NoSensorThreshold>::to_u16() - 1,
+        );
 
     match state.clone() {
         Err(SensorError::CalibrationError(data)) => match data.cal {
@@ -146,7 +282,7 @@ fn sensor_missing() {
 }
 
 #[test]
-fn invalid_reading() {
+fn sensor_broken() {
     setup_logging_lite().ok();
 
     // Allocate a single sensor
@@ -156,13 +292,20 @@ fn invalid_reading() {
     // (needs 2 samples to finish averaging)
     // Once averaging is complete, we'll get a result
     assert!(sensors
-        .add::<U2, MaxAdc, MagnetBounds>(0, <MaxAdc>::to_u16() - 1)
+        .add::<U2, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(
+            0,
+            <MaxAdc>::to_u16()
+        )
         .is_ok());
-    let state = sensors.add::<U2, MaxAdc, MagnetBounds>(0, <MaxAdc>::to_u16() - 1);
+    let state = sensors
+        .add::<U2, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(
+            0,
+            <MaxAdc>::to_u16(),
+        );
 
     match state.clone() {
         Err(SensorError::CalibrationError(data)) => match data.cal {
-            CalibrationStatus::InvalidReading => {
+            CalibrationStatus::SensorBroken => {
                 return;
             }
             _ => {}
@@ -172,13 +315,54 @@ fn invalid_reading() {
     assert!(false, "Unexpected state: {:?}", state);
 }
 
-fn magnet_positive_check<U: ArrayLength<SenseData>>(sensors: &mut Sensors<U>) {
-    // Add two values, larger than MaxAdc / 2 + MagnetBounds
-    let val = <MaxAdc>::to_u16() / 2 + <MagnetBounds>::to_u16() + 10;
+#[test]
+fn magnet_missing() {
+    setup_logging_lite().ok();
+
+    // Allocate a single sensor
+    let mut sensors = Sensors::<U1>::new().unwrap();
+
+    // Add max sensor value
     // (needs 2 samples to finish averaging)
     // Once averaging is complete, we'll get a result
-    assert!(sensors.add::<U2, MaxAdc, MagnetBounds>(0, val).is_ok());
-    let state = sensors.add::<U2, MaxAdc, MagnetBounds>(0, val);
+    assert!(sensors
+        .add::<U2, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(
+            0,
+            <MinOkThreshold>::to_u16() - 1
+        )
+        .is_ok());
+    let state = sensors
+        .add::<U2, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(
+            0,
+            <MinOkThreshold>::to_u16() - 1,
+        );
+
+    match state.clone() {
+        Err(SensorError::CalibrationError(data)) => match data.cal {
+            CalibrationStatus::MagnetWrongPoleOrMissing => {
+                return;
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+    assert!(false, "Unexpected state: {:?}", state);
+}
+
+fn magnet_check_calibration<U: ArrayLength<SenseData>>(sensors: &mut Sensors<U>) {
+    // Add two values, larger MinMagnetThreshold
+    let val = <MinOkThreshold>::to_u16() + 2;
+    // (needs 2 samples to finish averaging)
+    // Once averaging is complete, we'll get a result
+    assert!(sensors
+        .add::<U2, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(
+            0, val
+        )
+        .is_ok());
+    let state = sensors
+        .add::<U2, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(
+            0, val,
+        );
 
     let mut test = false;
     match state.clone() {
@@ -198,7 +382,7 @@ fn magnet_positive_check<U: ArrayLength<SenseData>>(sensors: &mut Sensors<U>) {
     let state = sensors.get_data(0);
     match state {
         Ok(val) => {
-            if val.cal == CalibrationStatus::MagnetDetectedPositive {
+            if val.cal == CalibrationStatus::MagnetDetected {
                 test = true;
             }
         }
@@ -207,13 +391,20 @@ fn magnet_positive_check<U: ArrayLength<SenseData>>(sensors: &mut Sensors<U>) {
     assert!(test, "Unexpected state: {:?}", state);
 }
 
-fn magnet_negative_check<U: ArrayLength<SenseData>>(sensors: &mut Sensors<U>) {
-    // Add two values, smaller than MaxAdc / 2 - MagnetBounds
-    let val = <MaxAdc>::to_u16() / 2 - <MagnetBounds>::to_u16() - 10;
+fn magnet_check_normal<U: ArrayLength<SenseData>>(sensors: &mut Sensors<U>) {
+    // Add two values, larger MinMagnetThreshold
+    let val = <MinMagnetThreshold>::to_u16() + 2;
     // (needs 2 samples to finish averaging)
     // Once averaging is complete, we'll get a result
-    assert!(sensors.add::<U2, MaxAdc, MagnetBounds>(0, val).is_ok());
-    let state = sensors.add::<U2, MaxAdc, MagnetBounds>(0, val);
+    assert!(sensors
+        .add::<U2, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(
+            0, val
+        )
+        .is_ok());
+    let state = sensors
+        .add::<U2, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(
+            0, val,
+        );
 
     let mut test = false;
     match state.clone() {
@@ -233,7 +424,7 @@ fn magnet_negative_check<U: ArrayLength<SenseData>>(sensors: &mut Sensors<U>) {
     let state = sensors.get_data(0);
     match state {
         Ok(val) => {
-            if val.cal == CalibrationStatus::MagnetDetectedNegative {
+            if val.cal == CalibrationStatus::MagnetDetected {
                 test = true;
             }
         }
@@ -242,48 +433,60 @@ fn magnet_negative_check<U: ArrayLength<SenseData>>(sensors: &mut Sensors<U>) {
     assert!(test, "Unexpected state: {:?}", state);
 }
 
-#[test]
-fn magnet_positive() {
-    setup_logging_lite().ok();
+fn magnet_calibrate<U: ArrayLength<SenseData>>(sensors: &mut Sensors<U>) {
+    // Calibrate sensor
+    magnet_check_calibration::<U>(sensors);
 
-    // Allocate a single sensor
-    let mut sensors = Sensors::<U1>::new().unwrap();
-
-    magnet_positive_check::<U1>(&mut sensors);
+    // Check again with normal operation
+    magnet_check_normal::<U>(sensors);
 }
 
 #[test]
-fn magnet_negative() {
+fn magnet_detected() {
     setup_logging_lite().ok();
 
     // Allocate a single sensor
     let mut sensors = Sensors::<U1>::new().unwrap();
 
-    magnet_negative_check::<U1>(&mut sensors);
+    // Two sets of samples that will put the sensor into normal mode (and check both MagnetDetected
+    // states)
+    magnet_calibrate::<U1>(&mut sensors);
 }
 
 #[test]
-fn magnet_positive_remove_negative() {
+fn magnet_too_strong() {
     setup_logging_lite().ok();
 
     // Allocate a single sensor
     let mut sensors = Sensors::<U1>::new().unwrap();
 
-    magnet_positive_check::<U1>(&mut sensors);
-    no_magnet::<U1>(&mut sensors);
-    magnet_negative_check::<U1>(&mut sensors);
+    // Two sets of samples that will put the sensor into normal mode (and check both MagnetDetected
+    // states)
+    magnet_calibrate::<U1>(&mut sensors);
+
+    // Check for too strong case
+    magnet_strong_normal::<U1>(&mut sensors);
+
+    // Run again as we should get too strong again
+    magnet_strong_normal::<U1>(&mut sensors);
 }
 
 #[test]
-fn magnet_negative_remove_positive() {
+fn magnet_too_weak() {
     setup_logging_lite().ok();
 
     // Allocate a single sensor
     let mut sensors = Sensors::<U1>::new().unwrap();
 
-    magnet_negative_check::<U1>(&mut sensors);
-    no_magnet::<U1>(&mut sensors);
-    magnet_positive_check::<U1>(&mut sensors);
+    // Two sets of samples that will put the sensor into normal mode (and check both MagnetDetected
+    // states)
+    magnet_calibrate::<U1>(&mut sensors);
+
+    // Check for too weak case
+    magnet_weak_normal::<U1>(&mut sensors);
+
+    // Check for too weak case in calibration mode
+    magnet_weak_calibration::<U1>(&mut sensors);
 }
 
 #[test]
@@ -293,16 +496,18 @@ fn min_max_reset() {
     // Allocate a single sensor
     let mut sensors = Sensors::<U1>::new().unwrap();
 
-    magnet_positive_check::<U1>(&mut sensors);
-    let old_min = sensors.get_data(0).unwrap().min;
-    let old_max = sensors.get_data(0).unwrap().max;
-    no_magnet::<U1>(&mut sensors);
+    // Two sets of samples that will put the sensor into normal mode (and check both MagnetDetected
+    // states)
+    magnet_calibrate::<U1>(&mut sensors);
+    let old_min = sensors.get_data(0).unwrap().stats.min;
+    let old_max = sensors.get_data(0).unwrap().stats.max;
+    magnet_weak_normal::<U1>(&mut sensors); // Bring sensor out of calibration
     match sensors.get_data(0) {
         Ok(data) => {
-            assert!(old_min != data.min, "Min value not reset");
-            assert!(old_max != data.max, "Max value not reset");
-            assert!(data.min == 0xFFFF);
-            assert!(data.max == 0x0000);
+            assert!(old_min != data.stats.min, "Min value not reset");
+            assert!(old_max != data.stats.max, "Max value not reset");
+            assert!(data.stats.min == 0xFFFF);
+            assert!(data.stats.max == 0x0000);
         }
         _ => {
             assert!(false, "Expected SensorData: {:?}", sensors.get_data(0));
@@ -318,14 +523,22 @@ fn sensor_min_adjust() {
     let mut sensors = Sensors::<U1>::new().unwrap();
 
     // Baseline
-    magnet_positive_check::<U1>(&mut sensors);
+    magnet_check_calibration::<U1>(&mut sensors);
+    magnet_check_normal::<U1>(&mut sensors);
 
     // Send a lower value than the min calibration and make sure it was set
-    let old_min = sensors.get_data(0).unwrap().min;
-    let val = old_min - 5;
+    let old_min = sensors.get_data(0).unwrap().stats.min;
+    let val = old_min - 1;
 
-    assert!(sensors.add::<U2, MaxAdc, MagnetBounds>(0, val).is_ok());
-    let state = sensors.add::<U2, MaxAdc, MagnetBounds>(0, val);
+    assert!(sensors
+        .add::<U2, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(
+            0, val
+        )
+        .is_ok());
+    let state = sensors
+        .add::<U2, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(
+            0, val,
+        );
     let mut test = false;
     match state.clone() {
         Ok(rval) => {
@@ -340,40 +553,6 @@ fn sensor_min_adjust() {
     assert!(test, "Unexpected state: {:?}", state);
 
     // Check min calibration
-    let new_min = sensors.get_data(0).unwrap().min;
+    let new_min = sensors.get_data(0).unwrap().stats.min;
     assert!(val == new_min);
-}
-
-#[test]
-fn sensor_max_adjust() {
-    setup_logging_lite().ok();
-
-    // Allocate a single sensor
-    let mut sensors = Sensors::<U1>::new().unwrap();
-
-    // Baseline
-    magnet_negative_check::<U1>(&mut sensors);
-
-    // Send a higher value than the max calibration and make sure it was set
-    let old_max = sensors.get_data(0).unwrap().max;
-    let val = old_max + 5;
-
-    assert!(sensors.add::<U2, MaxAdc, MagnetBounds>(0, val).is_ok());
-    let state = sensors.add::<U2, MaxAdc, MagnetBounds>(0, val);
-    let mut test = false;
-    match state.clone() {
-        Ok(rval) => {
-            if let Some(rval) = rval {
-                if rval.raw == val {
-                    test = true;
-                }
-            }
-        }
-        _ => {}
-    }
-    assert!(test, "Unexpected state: {:?}", state);
-
-    // Check min calibration
-    let new_max = sensors.get_data(0).unwrap().max;
-    assert!(val == new_max);
 }
