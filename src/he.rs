@@ -23,7 +23,7 @@
 
 // ----- Crates -----
 
-use heapless::consts::{U1000, U115, U2, U300, U4096};
+use heapless::consts::{U1000, U115, U2};
 use typenum::{UInt, UTerm, B0, B1};
 
 pub use kiibohd_hall_effect::{
@@ -38,12 +38,20 @@ type SenseAccumulation = U2;
 // --- NOTE ---
 // These thresholds were calculated on a Keystone v1.00 TKL pcb
 
-// Normal Mode Thresholds
-type MaxAdc = U4096;
-type MinMagnetThreshold = U300; // Lower than this value, the sensor will go back into calibration mode
-
 // Calibration Mode Thresholds
 type MinOkThreshold = UInt<
+    UInt<
+        UInt<
+            UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UTerm, B1>, B0>, B1>, B0>, B1>, B0>, B0>, B0>,
+            B1,
+        >,
+        B1,
+    >,
+    B0,
+>; // U1350 - b10101000110 - Switch not pressed (not 100% guaranteed, but the minimum range we can work withA
+   // Some sensors will have default values up to 1470 without any magnet and that is within the specs
+   // of the datasheet.
+type MaxOkThreshold = UInt<
     UInt<
         UInt<
             UInt<
@@ -58,23 +66,7 @@ type MinOkThreshold = UInt<
         B0,
     >,
     B0,
->; // U2500 - b100111000100 - Switch not pressed
-type MaxOkThreshold = UInt<
-    UInt<
-        UInt<
-            UInt<
-                UInt<
-                    UInt<UInt<UInt<UInt<UInt<UInt<UInt<UTerm, B1>, B1>, B0>, B0>, B1>, B0>, B0>,
-                    B0,
-                >,
-                B0,
-            >,
-            B0,
-        >,
-        B0,
-    >,
-    B0,
->; // U3200 - b110010000000 Switch not pressed
+>; // U2500 - b100111000100 - Switch fully pressed
 type NoSensorThreshold = U1000; // Likely invalid ADC level from non-existent sensor (or very low magnet)
 
 // ----- Globals -----
@@ -94,8 +86,6 @@ pub enum HeStatus {
     AnalysisReady,
     ErrorInvalidIndex,
     ErrorInvalidReading,
-    ErrorMagnetTooStrong,
-    ErrorMagnetTooWeak,
     ErrorMagnetWrongPoleOrMissing,
     ErrorNotInitialized,
     ErrorSensorBroken,
@@ -123,6 +113,7 @@ pub extern "C" fn he_init() -> HeStatus {
 /// This should be the raw value from the ADC
 /// Once enough values have been accumulated, data analysis is done
 /// automatically
+/// Uses normal mode
 /// # Safety
 #[no_mangle]
 pub unsafe extern "C" fn he_scan_event(
@@ -138,31 +129,73 @@ pub unsafe extern "C" fn he_scan_event(
         }
     };
 
-    match intf.add::<SenseAccumulation, MinMagnetThreshold, MaxAdc, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(index as usize, val) {
-            Ok(data) => {
-                if let Some(data) = data {
-                    *analysis = data.clone();
-                    HeStatus::AnalysisReady
-                } else {
-                    HeStatus::Success
-                }
+    match intf.add::<SenseAccumulation>(index as usize, val) {
+        Ok(data) => {
+            if let Some(data) = data {
+                *analysis = data.clone();
+                HeStatus::AnalysisReady
+            } else {
+                HeStatus::Success
             }
-            Err(err) => match err {
-                SensorError::CalibrationError(data) => match data.cal {
-                    CalibrationStatus::MagnetTooStrong => HeStatus::ErrorMagnetTooStrong,
-                    CalibrationStatus::MagnetTooWeak => HeStatus::ErrorMagnetTooWeak,
-                    CalibrationStatus::MagnetWrongPoleOrMissing => HeStatus::ErrorMagnetWrongPoleOrMissing,
-                    CalibrationStatus::NotReady => HeStatus::ErrorSensorNotReady,
-                    CalibrationStatus::SensorBroken => HeStatus::ErrorSensorBroken,
-                    CalibrationStatus::SensorMissing => HeStatus::ErrorSensorMissing,
-                    _ => HeStatus::ErrorUnknown,
-                },
-                SensorError::InvalidSensor(_) => HeStatus::ErrorInvalidIndex,
+        }
+        Err(err) => match err {
+            SensorError::CalibrationError(data) => match data.cal {
+                CalibrationStatus::NotReady => HeStatus::ErrorSensorNotReady,
                 _ => HeStatus::ErrorUnknown,
             },
-        }
+            SensorError::InvalidSensor(_) => HeStatus::ErrorInvalidIndex,
+            _ => HeStatus::ErrorUnknown,
+        },
+    }
 }
 
+/// Processes an ADC event for the given index (scan code location)
+/// This should be the raw value from the ADC
+/// Once enough values have been accumulated, data analysis is done
+/// automatically
+/// Uses test mode
+/// # Safety
+#[no_mangle]
+pub unsafe extern "C" fn he_test_event(
+    index: u16,
+    val: u16,
+    analysis: *mut SenseAnalysis,
+) -> HeStatus {
+    // Retrieve interface
+    let intf = match INTF.as_mut() {
+        Some(intf) => intf,
+        None => {
+            return HeStatus::ErrorNotInitialized;
+        }
+    };
+
+    match intf.add_test::<SenseAccumulation, MinOkThreshold, MaxOkThreshold, NoSensorThreshold>(
+        index as usize,
+        val,
+    ) {
+        Ok(data) => {
+            if let Some(data) = data {
+                *analysis = data.clone();
+                HeStatus::AnalysisReady
+            } else {
+                HeStatus::Success
+            }
+        }
+        Err(err) => match err {
+            SensorError::CalibrationError(data) => match data.cal {
+                CalibrationStatus::MagnetWrongPoleOrMissing => {
+                    HeStatus::ErrorMagnetWrongPoleOrMissing
+                }
+                CalibrationStatus::NotReady => HeStatus::ErrorSensorNotReady,
+                CalibrationStatus::SensorBroken => HeStatus::ErrorSensorBroken,
+                CalibrationStatus::SensorMissing => HeStatus::ErrorSensorMissing,
+                _ => HeStatus::ErrorUnknown,
+            },
+            SensorError::InvalidSensor(_) => HeStatus::ErrorInvalidIndex,
+            _ => HeStatus::ErrorUnknown,
+        },
+    }
+}
 /// Retrieve calibration status
 #[no_mangle]
 pub extern "C" fn he_calibration(index: u16) -> CalibrationStatus {
