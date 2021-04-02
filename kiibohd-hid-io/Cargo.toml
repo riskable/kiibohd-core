@@ -2,7 +2,7 @@
 name          = "kiibohd-hid-io"
 version       = "0.1.0"
 authors       = ["Jacob Alexander <haata@kiibohd.com>"]
-license       = "MIT"
+license       = "MIT OR Apache-2.0"
 description   = """
 HID-IO protocol implementation for the C kiibohd firmware.
 Device Cortex-M implementation.

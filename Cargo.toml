@@ -2,7 +2,7 @@
 name          = "kiibohd-core"
 version       = "0.1.0"
 authors       = ["Jacob Alexander <haata@kiibohd.com>"]
-
+license       = "MIT OR Apache-2.0"
 edition       = "2018"
 
 
@@ -18,6 +18,9 @@ default = [
 
 # The std option is used for cargo test only
 std = []
+
+# Used when compiling as a static library
+lib = []
 
 
 [workspace]
