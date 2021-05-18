@@ -27,6 +27,8 @@ lib = []
 members = [
   "kiibohd-hall-effect",
   "kiibohd-hid-io",
+  "kiibohd-log",
+  "kiibohd-usb",
 ]
 
 
@@ -36,5 +38,7 @@ cstr_core           = { version = "^0.2", default-features = false }
 heapless            = { version = "^0.6" }
 kiibohd-hid-io      = { path = "kiibohd-hid-io", optional = true }
 kiibohd-hall-effect = { path = "kiibohd-hall-effect", optional = true }
+kiibohd-log         = { path = "kiibohd-log", optional = true }
+kiibohd-usb         = { path = "kiibohd-usb", optional = true }
 pkg-version         = { version = "^1.0" }
 typenum             = { version = "^1.12", features = ["no_std"] }
