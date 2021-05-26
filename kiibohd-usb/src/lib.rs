@@ -16,11 +16,9 @@ use usbd_hid::{UsbBus, UsbBusAllocator, UsbClass};
 pub struct HidInterface<'a, B: UsbBus> {
     kbd_6kro: HIDClass<'a, B>,
     kbd_nkro: HIDClass<'a, B>,
-    mouse: HIDClass<'a, B>,
-    /*
     ctrl: HIDClass<'a, B>,
-    //hidio: HIDClass<'a, B>,
-    */
+    mouse: HIDClass<'a, B>,
+    hidio: HIDClass<'a, B>,
 }
 
 impl<B: UsbBus> HidInterface<'_, B> {
@@ -47,25 +45,21 @@ impl<B: UsbBus> HidInterface<'_, B> {
                 locale,
             },
         );
+        let ctrl = HIDClass::new_ep_in(
+            alloc,
+            SysCtrlConsumerCtrlReport::desc(),
+            10,
+            HidClassSettings::default(),
+        );
         let mouse =
             HIDClass::new_ep_in(alloc, MouseReport::desc(), 10, HidClassSettings::default());
-        /*
-        let ctrl = HIDClass::new_ep_in(
-                alloc,
-                SysCtrlConsumerCtrlReport::desc(),
-                10,
-                HidClassSettings::default(),
-            );
         let hidio = HIDClass::new(alloc, HidioReport::desc(), 10, HidClassSettings::default());
-        */
         HidInterface {
             kbd_6kro,
             kbd_nkro,
-            mouse,
-            /*
             ctrl,
+            mouse,
             hidio,
-            */
         }
     }
 
@@ -94,16 +88,13 @@ impl<B: UsbBus> HidInterface<'_, B> {
     }
 
     /// Used to pass all of the interfaces to usb_dev.poll()
-    //pub fn interfaces(&mut self) -> [&'_ mut dyn UsbClass<B>; 5] {
-    pub fn interfaces(&mut self) -> [&'_ mut dyn UsbClass<B>; 3] {
+    pub fn interfaces(&mut self) -> [&'_ mut dyn UsbClass<B>; 5] {
         [
             &mut self.kbd_6kro,
             &mut self.kbd_nkro,
             &mut self.mouse,
-            /*
             &mut self.ctrl,
-            //&mut self.hidio,
-            */
+            &mut self.hidio,
         ]
     }
 

@@ -72,7 +72,7 @@ impl log::Log for Logger {
             #[cfg(feature = "rtt")]
             rtt_target::rprintln!(
                 "{:10}:\x1b[{}m{:5}\x1b[0m:{}",
-                dwt.cyccnt.read(),
+                dwt.get_cycle_count(),
                 color,
                 record.level(),
                 record.args()
@@ -80,7 +80,7 @@ impl log::Log for Logger {
             #[cfg(feature = "semihosting")]
             cortex_m_semihosting::hprintln!(
                 "{:10}:\x1b[{}m{:5}\x1b[0m:{}",
-                dwt.cyccnt.read(),
+                dwt.get_cycle_count(),
                 color,
                 record.level(),
                 record.args()
