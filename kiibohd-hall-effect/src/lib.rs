@@ -274,7 +274,7 @@ impl SenseData {
             self.cal = CalibrationStatus::MagnetDetected;
 
             // Calculate new analysis (requires previous results + min/max)
-            self.analysis = SenseAnalysis::new(data, &self);
+            self.analysis = SenseAnalysis::new(data, self);
             Ok(Some(&self.analysis))
         } else {
             Ok(None)
@@ -324,7 +324,7 @@ impl SenseData {
             }
 
             // Calculate new analysis (requires previous results + min/max)
-            self.analysis = SenseAnalysis::new(data, &self);
+            self.analysis = SenseAnalysis::new(data, self);
             Ok(Some(&self.analysis))
         } else {
             Ok(None)

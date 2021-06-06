@@ -17,17 +17,19 @@ pub use rtt_target;
 
 /// Logger Structure
 ///
-/// Example Usage
+/// Example RTT Usage
 /// ```
-/// use kiibohd_rtt_log::{log, Logger, rtt_target, setup_rtt};
-/// use rtt_target::{rtt_init_default, set_print_channel};
+/// use kiibohd_log::{log, Logger};
 ///
 /// static LOGGER: Logger = Logger::new(log::LevelFilter::Info);
 ///
 /// fn main() {
 ///     // Setup RTT logging
-///     let channels = rtt_init_default!();
-///     set_print_channel(channels.up.0);
+///     let mut channels = rtt_target::rtt_init_default!();
+///
+///     // cortex-m or riscv
+///     //rtt_target::set_print_channel(channels.up.0);
+///     // otherwise use set_print_channel_cs
 ///     log::set_logger(&LOGGER).unwrap();
 ///
 ///     // Example usage
@@ -39,8 +41,26 @@ pub use rtt_target;
 ///
 ///     // Read downchannel
 ///     let mut buf = [0u8; 16];
-///     downchannel.read(&mut buf[..]);
-///     log::trace!("{}", buf);
+///     channels.down.0.read(&mut buf[..]);
+///     log::trace!("{:?}", buf);
+/// }
+/// ```
+///
+/// Example Semihosting Usage
+/// ```
+/// use kiibohd_log::{log, Logger};
+///
+/// static LOGGER: Logger = Logger::new(log::LevelFilter::Info);
+///
+/// fn main() {
+///     log::set_logger(&LOGGER).unwrap();
+///
+///     // Example usage
+///     log::trace!("Trace message");
+///     log::debug!("Debug message");
+///     log::info!("Info message");
+///     log::warn!("Warn message");
+///     log::error!("Error message");
 /// }
 /// ```
 pub struct Logger {
@@ -61,6 +81,7 @@ impl log::Log for Logger {
     // Handle entry prefixes
     fn log(&self, record: &log::Record) {
         if self.enabled(record.metadata()) {
+            #[cfg(any(feature = "rtt", feature = "semihosting"))]
             let color = match record.level() {
                 log::Level::Error => "1;5;31",
                 log::Level::Warn => "1;33",
@@ -68,6 +89,7 @@ impl log::Log for Logger {
                 log::Level::Debug => "1;35",
                 log::Level::Trace => "1;90",
             };
+            #[cfg(any(feature = "rtt", feature = "semihosting"))]
             let dwt = unsafe { &*cortex_m::peripheral::DWT::ptr() };
             #[cfg(feature = "rtt")]
             rtt_target::rprintln!(
