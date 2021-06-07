@@ -90,11 +90,11 @@ impl log::Log for Logger {
                 log::Level::Trace => "1;90",
             };
             #[cfg(any(feature = "rtt", feature = "semihosting"))]
-            let dwt = unsafe { &*cortex_m::peripheral::DWT::ptr() };
+            let timestamp = cortex_m::peripheral::DWT::get_cycle_count();
             #[cfg(feature = "rtt")]
             rtt_target::rprintln!(
                 "{:10}:\x1b[{}m{:5}\x1b[0m:{}",
-                dwt.get_cycle_count(),
+                timestamp,
                 color,
                 record.level(),
                 record.args()
@@ -102,7 +102,7 @@ impl log::Log for Logger {
             #[cfg(feature = "semihosting")]
             cortex_m_semihosting::hprintln!(
                 "{:10}:\x1b[{}m{:5}\x1b[0m:{}",
-                dwt.get_cycle_count(),
+                timestamp,
                 color,
                 record.level(),
                 record.args()
@@ -115,7 +115,7 @@ impl log::Log for Logger {
                 let stim = &mut itm.stim[0];
                 cortex_m::iprintln!(stim,
                     "{}:\x1b[{}m{}\x1b[0m - {}",
-                    dwt.cyccnt.read(),
+                    timestamp,
                     color,
                     record.level(),
                     record.args()
