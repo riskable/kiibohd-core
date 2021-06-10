@@ -10,4 +10,4 @@
 // This forces rust to import all the symbols from kiibohd-hid-io
 // and include them into libkiibohd_core.a
 #[allow(unused_imports)]
-pub use kiibohd_hid_io::*;
+pub use kiibohd_hid_io_ffi::*;

@@ -14,6 +14,7 @@ name = "kiibohd_core"
 default = [
   "kiibohd-hall-effect",
   "kiibohd-hid-io",
+  "kiibohd-hid-io-ffi",
   "kiibohd-keyscanning",
 ]
 
@@ -28,6 +29,7 @@ lib = []
 members = [
   "kiibohd-hall-effect",
   "kiibohd-hid-io",
+  "kiibohd-hid-io-ffi",
   "kiibohd-keyscanning",
   "kiibohd-log",
   "kiibohd-usb",
@@ -38,7 +40,7 @@ members = [
 c_utf8              = { version = "^0.1", default-features = false }
 cstr_core           = { version = "^0.2", default-features = false }
 heapless            = { version = "^0.7" }
-kiibohd-hid-io      = { path = "kiibohd-hid-io", optional = true }
+kiibohd-hid-io-ffi  = { path = "kiibohd-hid-io-ffi", optional = true }
 kiibohd-hall-effect = { path = "kiibohd-hall-effect", optional = true }
 kiibohd-keyscanning = { path = "kiibohd-keyscanning", optional = true }
 kiibohd-log         = { path = "kiibohd-log", optional = true }

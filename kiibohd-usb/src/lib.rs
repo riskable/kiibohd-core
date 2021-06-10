@@ -13,7 +13,9 @@ mod test;
 pub use crate::descriptor::{
     HidioReport, KeyboardNkroReport, MouseReport, SysCtrlConsumerCtrlReport,
 };
-use heapless::spsc::{Consumer, Producer};
+use heapless::spsc::Consumer;
+use heapless::Vec;
+use kiibohd_hid_io::{CommandInterface, KiibohdCommandInterface};
 use usbd_hid::descriptor::generator_prelude::*;
 use usbd_hid::descriptor::KeyboardReport;
 use usbd_hid::hid_class::{HIDClass, HidClassSettings, HidProtocol, HidSubClass};
@@ -57,17 +59,6 @@ pub enum CtrlState {
     Clear,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct HidioPacket {
-    pub data: [u8; 64],
-}
-
-impl HidioPacket {
-    fn new() -> Self {
-        Self { data: [0; 64] }
-    }
-}
-
 /// USB HID Combination Interface
 ///
 /// Handles creation and management of multiple USB HID interfaces through SPSC queues.
@@ -89,8 +80,6 @@ pub struct HidInterface<
     const KBD_SIZE: usize,
     const MOUSE_SIZE: usize,
     const CTRL_SIZE: usize,
-    const HIDIO_RX_SIZE: usize,
-    const HIDIO_TX_SIZE: usize,
 > {
     kbd_6kro: HIDClass<'a, B>,
     kbd_6kro_report: KeyboardReport,
@@ -100,12 +89,14 @@ pub struct HidInterface<
     ctrl: HIDClass<'a, B>,
     ctrl_consumer: Consumer<'a, CtrlState, CTRL_SIZE>,
     ctrl_report: SysCtrlConsumerCtrlReport,
-    //mouse: HIDClass<'a, B>,
+    #[cfg(feature = "mouse")]
+    mouse: HIDClass<'a, B>,
+    #[cfg(feature = "mouse")]
     mouse_consumer: Consumer<'a, MouseState, MOUSE_SIZE>,
+    #[cfg(feature = "mouse")]
     mouse_report: MouseReport,
+    #[cfg(feature = "hidio")]
     hidio: HIDClass<'a, B>,
-    hidio_rx: Producer<'a, HidioPacket, HIDIO_RX_SIZE>,
-    hidio_tx: Consumer<'a, HidioPacket, HIDIO_TX_SIZE>,
 }
 
 impl<
@@ -113,19 +104,16 @@ impl<
         const KBD_SIZE: usize,
         const MOUSE_SIZE: usize,
         const CTRL_SIZE: usize,
-        const HIDIO_RX_SIZE: usize,
-        const HIDIO_TX_SIZE: usize,
-    > HidInterface<'_, B, KBD_SIZE, MOUSE_SIZE, CTRL_SIZE, HIDIO_RX_SIZE, HIDIO_TX_SIZE>
+    > HidInterface<'_, B, KBD_SIZE, MOUSE_SIZE, CTRL_SIZE>
 {
     pub fn new<'a>(
         alloc: &'a UsbBusAllocator<B>,
         locale: HidCountryCode,
         kbd_consumer: Consumer<'a, KeyState, KBD_SIZE>,
+        #[cfg(feature = "mouse")]
         mouse_consumer: Consumer<'a, MouseState, MOUSE_SIZE>,
         ctrl_consumer: Consumer<'a, CtrlState, CTRL_SIZE>,
-        hidio_rx: Producer<'a, HidioPacket, HIDIO_RX_SIZE>,
-        hidio_tx: Consumer<'a, HidioPacket, HIDIO_TX_SIZE>,
-    ) -> HidInterface<'a, B, KBD_SIZE, MOUSE_SIZE, CTRL_SIZE, HIDIO_RX_SIZE, HIDIO_TX_SIZE> {
+    ) -> HidInterface<'a, B, KBD_SIZE, MOUSE_SIZE, CTRL_SIZE> {
         let kbd_6kro = HIDClass::new_ep_in(
             alloc,
             KeyboardReport::desc(),
@@ -154,10 +142,10 @@ impl<
             10,
             HidClassSettings::default(),
         );
-        /*
+        #[cfg(feature = "mouse")]
         let mouse =
             HIDClass::new_ep_in(alloc, MouseReport::desc(), 10, HidClassSettings::default());
-        */
+        #[cfg(feature = "hidio")]
         let hidio = HIDClass::new(alloc, HidioReport::desc(), 10, HidClassSettings::default());
 
         HidInterface {
@@ -180,8 +168,11 @@ impl<
                 consumer_ctrl: 0,
                 system_ctrl: 0,
             },
-            //mouse,
+            #[cfg(feature = "mouse")]
+            mouse,
+            #[cfg(feature = "mouse")]
             mouse_consumer,
+            #[cfg(feature = "mouse")]
             mouse_report: MouseReport {
                 buttons: 0,
                 x: 0,
@@ -189,9 +180,8 @@ impl<
                 vert_wheel: 0,
                 horz_wheel: 0,
             },
+            #[cfg(feature = "hidio")]
             hidio,
-            hidio_rx,
-            hidio_tx,
         }
     }
 
@@ -216,16 +206,46 @@ impl<
     }
 
     /// Used to pass all of the interfaces to usb_dev.poll()
-    //pub fn interfaces(&mut self) -> [&'_ mut dyn UsbClass<B>; 5] {
+    #[cfg(all(feature = "mouse", feature = "hidio"))]
+    pub fn interfaces(&mut self) -> [&'_ mut dyn UsbClass<B>; 5] {
+        [
+            &mut self.kbd_6kro,
+            &mut self.kbd_nkro,
+            &mut self.ctrl,
+            &mut self.mouse,
+            &mut self.hidio,
+        ]
+    }
+
+    /// Used to pass all of the interfaces to usb_dev.poll()
+    #[cfg(all(feature = "mouse", not(feature = "hidio")))]
     pub fn interfaces(&mut self) -> [&'_ mut dyn UsbClass<B>; 4] {
         [
             &mut self.kbd_6kro,
             &mut self.kbd_nkro,
             &mut self.ctrl,
-            /*
             &mut self.mouse,
-            */
+        ]
+    }
+
+    /// Used to pass all of the interfaces to usb_dev.poll()
+    #[cfg(all(not(feature = "mouse"), feature = "hidio"))]
+    pub fn interfaces(&mut self) -> [&'_ mut dyn UsbClass<B>; 4] {
+        [
+            &mut self.kbd_6kro,
+            &mut self.kbd_nkro,
+            &mut self.ctrl,
             &mut self.hidio,
+        ]
+    }
+
+    /// Used to pass all of the interfaces to usb_dev.poll()
+    #[cfg(all(not(feature = "mouse"), not(feature = "hidio")))]
+    pub fn interfaces(&mut self) -> [&'_ mut dyn UsbClass<B>; 3] {
+        [
+            &mut self.kbd_6kro,
+            &mut self.kbd_nkro,
+            &mut self.ctrl,
         ]
     }
 
@@ -341,6 +361,7 @@ impl<
         }
     }
 
+    #[cfg(feature = "mouse")]
     fn mouse_button_bit(&mut self, button: u8, press: bool) {
         // Ignore keys outside of 1 to 8
         if let 1..=8 = button {
@@ -357,6 +378,7 @@ impl<
         }
     }
 
+    #[cfg(feature = "mouse")]
     fn push_mouse(&mut self) {
         let mut updated = false;
 
@@ -388,11 +410,9 @@ impl<
 
         // Push report
         if updated {
-            /*
             if let Err(val) = self.mouse.push_input(&self.mouse_report) {
                 log::error!("Mouse Buffer Overflow: {:?}", val);
             }
-            */
         }
 
         // Clear relative fields
@@ -438,7 +458,7 @@ impl<
 
     /// Processes each of the spsc queues and pushes data over USB
     /// This is primarily for keyboard, mouse and ctrl interfaces.
-    /// HID-IO is pushed more frequently depending on USB interrupts.
+    /// HID-IO is handled with poll()
     pub fn push(&mut self) {
         // Update keyboard if necessary
         if self.update_kbd() {
@@ -457,20 +477,19 @@ impl<
         self.push_ctrl();
 
         // Push mouse reports
+        #[cfg(feature = "mouse")]
         self.push_mouse();
-
-        // Push any pending hidio reports
-        self.poll();
     }
 
     /// Poll the HID-IO interface
-    pub fn poll(&mut self) {
+    #[cfg(feature = "hidio")]
+    pub fn poll<KINTF: KiibohdCommandInterface<H>, const TX: usize, const RX: usize, const N: usize, const H: usize, const S: usize, const ID: usize>(&mut self, interface: &mut CommandInterface<KINTF, TX, RX, N, H, S, ID>) {
         // Check for any incoming packets
-        while self.hidio_rx.ready() {
-            let mut packet = HidioPacket::new();
-            match self.hidio.pull_raw_output(&mut packet.data) {
+        while !interface.rx_bytebuf.is_full() {
+            let mut packet = Vec::new();
+            match self.hidio.pull_raw_output(&mut packet) {
                 Ok(_size) => {
-                    self.hidio_rx.enqueue(packet).unwrap();
+                    interface.rx_bytebuf.enqueue(packet).unwrap();
                 }
                 Err(_) => {
                     break;
@@ -479,15 +498,15 @@ impl<
         }
 
         // Push as many packets as possible
-        while self.hidio_tx.ready() {
+        while !interface.tx_bytebuf.is_empty() {
             // Don't dequeue yet, we might not be able to send
-            let packet = self.hidio_tx.peek().unwrap();
+            let packet = interface.tx_bytebuf.peek().unwrap();
 
             // Attempt to push
-            match self.hidio.push_raw_input(&packet.data) {
+            match self.hidio.push_raw_input(packet) {
                 Ok(_size) => {
                     // Dequeue
-                    self.hidio_tx.dequeue().unwrap();
+                    interface.tx_bytebuf.dequeue().unwrap();
                 }
                 Err(_) => {
                     break;
