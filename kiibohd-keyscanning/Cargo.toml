@@ -1,0 +1,15 @@
+[package]
+name = "kiibohd-keyscanning"
+version = "0.0.1"
+authors = ["Zion Koyl <hiszd1@gmail.com>"]
+license = "MIT OR Apache-2.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+generic-array   = "0.14.4"
+embedded-hal    = "0.2.5"
+embedded-time   = "0.10.1"
+keyberon        = "0.1.1"
+heapless        = "0.5"
