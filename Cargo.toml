@@ -13,7 +13,6 @@ name = "kiibohd_core"
 [features]
 default = [
   "kiibohd-hall-effect",
-  "kiibohd-hid-io",
   "kiibohd-hid-io-ffi",
   "kiibohd-keyscanning",
 ]
