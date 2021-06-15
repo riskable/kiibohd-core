@@ -403,8 +403,7 @@ pub trait KiibohdCommandInterface<const H: usize> {
     /// HID-IO Sync Packet received
     /// TODO: Is this necessary anymore, or can timeouts be handled here?
     /// Callback
-    fn hidio_sync_packet(&self) {
-    }
+    fn hidio_sync_packet(&self) {}
 
     /// Returns the device name (e.g. Keystone TKL)a
     /// Callback

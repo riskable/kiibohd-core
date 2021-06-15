@@ -99,19 +99,14 @@ pub struct HidInterface<
     hidio: HIDClass<'a, B>,
 }
 
-impl<
-        B: UsbBus,
-        const KBD_SIZE: usize,
-        const MOUSE_SIZE: usize,
-        const CTRL_SIZE: usize,
-    > HidInterface<'_, B, KBD_SIZE, MOUSE_SIZE, CTRL_SIZE>
+impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE: usize>
+    HidInterface<'_, B, KBD_SIZE, MOUSE_SIZE, CTRL_SIZE>
 {
     pub fn new<'a>(
         alloc: &'a UsbBusAllocator<B>,
         locale: HidCountryCode,
         kbd_consumer: Consumer<'a, KeyState, KBD_SIZE>,
-        #[cfg(feature = "mouse")]
-        mouse_consumer: Consumer<'a, MouseState, MOUSE_SIZE>,
+        #[cfg(feature = "mouse")] mouse_consumer: Consumer<'a, MouseState, MOUSE_SIZE>,
         ctrl_consumer: Consumer<'a, CtrlState, CTRL_SIZE>,
     ) -> HidInterface<'a, B, KBD_SIZE, MOUSE_SIZE, CTRL_SIZE> {
         let kbd_6kro = HIDClass::new_ep_in(
@@ -242,11 +237,7 @@ impl<
     /// Used to pass all of the interfaces to usb_dev.poll()
     #[cfg(all(not(feature = "mouse"), not(feature = "hidio")))]
     pub fn interfaces(&mut self) -> [&'_ mut dyn UsbClass<B>; 3] {
-        [
-            &mut self.kbd_6kro,
-            &mut self.kbd_nkro,
-            &mut self.ctrl,
-        ]
+        [&mut self.kbd_6kro, &mut self.kbd_nkro, &mut self.ctrl]
     }
 
     /// Modifies the nkro report bitmask
@@ -483,7 +474,18 @@ impl<
 
     /// Poll the HID-IO interface
     #[cfg(feature = "hidio")]
-    pub fn poll<KINTF: KiibohdCommandInterface<H>, const TX: usize, const RX: usize, const N: usize, const H: usize, const S: usize, const ID: usize>(&mut self, interface: &mut CommandInterface<KINTF, TX, RX, N, H, S, ID>) {
+    pub fn poll<
+        KINTF: KiibohdCommandInterface<H>,
+        const TX: usize,
+        const RX: usize,
+        const N: usize,
+        const H: usize,
+        const S: usize,
+        const ID: usize,
+    >(
+        &mut self,
+        interface: &mut CommandInterface<KINTF, TX, RX, N, H, S, ID>,
+    ) {
         // Check for any incoming packets
         while !interface.rx_bytebuf.is_full() {
             let mut packet = Vec::new();
