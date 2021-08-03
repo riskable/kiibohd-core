@@ -1,0 +1,13 @@
+[package]
+name = "kiibohd-hall-effect-keyscanning"
+version = "0.1.0"
+authors = ["Jacob Alexander <haata@kiibohd.com>"]
+license = "MIT OR Apache-2.0"
+edition = "2018"
+
+[dependencies]
+kiibohd-hall-effect = { path = "../kiibohd-hall-effect" }
+generic-array   = "0.14.4"
+embedded-hal    = "0.2.5"
+embedded-time   = "0.10.1"
+heapless        = "0.5"

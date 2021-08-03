@@ -27,6 +27,7 @@ lib = []
 [workspace]
 members = [
   "kiibohd-hall-effect",
+  "kiibohd-hall-effect-keyscanning",
   "kiibohd-hid-io",
   "kiibohd-hid-io-ffi",
   "kiibohd-keyscanning",
