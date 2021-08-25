@@ -14,14 +14,20 @@ pub use crate::descriptor::{
     HidioReport, KeyboardNkroReport, MouseReport, SysCtrlConsumerCtrlReport,
 };
 use heapless::spsc::Consumer;
-use heapless::Vec;
-use kiibohd_hid_io::{CommandInterface, KiibohdCommandInterface};
+use usb_device::bus::{UsbBus, UsbBusAllocator};
+use usb_device::class::UsbClass;
 use usbd_hid::descriptor::generator_prelude::*;
 use usbd_hid::descriptor::KeyboardReport;
 use usbd_hid::hid_class::{HIDClass, HidClassSettings, HidProtocol, HidSubClass};
 pub use usbd_hid::hid_class::{HidCountryCode, HidProtocolMode, ProtocolModeConfig};
-use usbd_hid::{UsbBus, UsbBusAllocator, UsbClass};
+use usbd_hid::UsbError;
 
+#[cfg(feature = "hidio")]
+use heapless::Vec;
+#[cfg(feature = "hidio")]
+use kiibohd_hid_io::{CommandInterface, KiibohdCommandInterface};
+
+#[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
 pub enum KeyState {
     /// Press the given USB HID Keyboard code
     Press(u8),
@@ -31,6 +37,7 @@ pub enum KeyState {
     Clear,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
 pub enum MouseState {
     /// Press the given mouse button (1->8)
     Press(u8),
@@ -46,6 +53,7 @@ pub enum MouseState {
     Clear,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
 pub enum CtrlState {
     /// Press the given USB HID System Ctrl code
     SystemCtrlPress(u8),
@@ -74,6 +82,89 @@ pub enum CtrlState {
 /// - Call poll to process queues in both directions (or push, which will call poll for you)
 ///   Will attempt to push and pull as many packets as possible in case the USB device supports
 ///   larger buffers (e.g. double buffering)
+///
+/// Example Usage (atsam4s)
+/// ```
+/// use heapless::spsc::Queue;
+///
+/// // These define the maximum pending items in each queue
+/// const KBD_QUEUE_SIZE: usize = 10; // This would limit NKRO mode to 10KRO
+/// const MOUSE_QUEUE_SIZE: usize = 5;
+/// const CTRL_QUEUE_SIZE: usize = 2;
+///
+/// type HidInterface =
+///     kiibohd_usb::HidInterface<'static, UdpBus, KBD_QUEUE_SIZE, MOUSE_QUEUE_SIZE, CTRL_QUEUE_SIZE>;
+///
+/// pub struct HidioInterface<const H: usize> {}
+///
+/// impl<const H: usize> HidioInterface<H> {
+///     fn new() -> Self {
+///         Self {}
+///     }
+/// }
+///
+/// impl<const H: usize> KiibohdCommandInterface<H> for HidioInterface<H> {
+///     fn h0001_device_name(&self) -> Option<&str> {
+///         Some("Input Club Keystone - TKL")
+///     }
+///
+///     fn h0001_firmware_name(&self) -> Option<&str> {
+///         Some("kiibohd-firmware")
+///     }
+/// }
+///
+/// // Setup the queues used to generate the input reports (ctrl, keyboard and mouse)
+/// let ctrl_queue: Queue<kiibohd_usb::CtrlState, CTRL_QUEUE_SIZE> = Queue::new();
+/// let kbd_queue: Queue<kiibohd_usb::KeyState, KBD_QUEUE_SIZE> = Queue::new();
+/// let mouse_queue: Queue<kiibohd_usb::MouseState, MOUSE_QUEUE_SIZE> = Queue::new();
+/// let (kbd_producer, kbd_consumer) = kbd_queue.split();
+/// let (mouse_producer, mouse_consumer) = mouse_queue.split();
+/// let (ctrl_producer, ctrl_consumer) = ctrl_queue.split();
+///
+/// // Setup the interface
+/// // NOTE: Ignoring usb_bus setup in this example, use a compliant usb-device UsbBus interface
+/// let usb_hid = HidInterface::new(
+///     usb_bus,
+///     HidCountryCode::NotSupported,
+///     kbd_consumer,
+///     mouse_consumer,
+///     ctrl_consumer,
+/// );
+///
+/// // Basic CommandInterface
+/// let hidio_intf = CommandInterface::<
+///     HidioInterface<MESSAGE_LEN>,
+///     TX_BUF,
+///     RX_BUF,
+///     BUF_CHUNK,
+///     MESSAGE_LEN,
+///     SERIALIZATION_LEN,
+///     ID_LEN,
+/// >::new(
+///     &[
+///         HidIoCommandId::SupportedIds,
+///         HidIoCommandId::GetInfo,
+///         HidIoCommandId::TestPacket,
+///     ],
+///     HidioInterface::<MESSAGE_LEN>::new(),
+/// )
+/// .unwrap();
+///
+/// // To push keyboard key report, first push to the queue, then process all queues
+/// kbd_producer.enqueue(kiibohd_usb::KeyState::Press(0x04)); // Press the A key
+/// usb_hid.push();
+///
+/// // In the USB interrupt (or similar), usb_hid will also need to be handled (Ctrl EP requests)
+/// fn usb_irq() {
+///     let usb_dev = some_global_mechanism.usb_dev;
+///     let usb_hid = some_global_mechanism.usb_hid;
+///     let hidio_intf = some_global_mechanism.hidio_intf;
+///     if usb_dev.poll(&mut usb_hid.interfaces()) {
+///         // poll is only available with the hidio feature
+///         usb_hid.poll(hidio_intf);
+///     }
+/// }
+/// ```
 pub struct HidInterface<
     'a,
     B: UsbBus,
@@ -183,7 +274,7 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
     /// Dynamically update the keyboard protocol mode (and behavior)
     /// Used to force NKRO or 6KRO regardless of what the host configures
     pub fn set_kbd_protocol_mode(&mut self, mode: HidProtocolMode, config: ProtocolModeConfig) {
-        log::trace!(
+        defmt::trace!(
             "HidInterface::set_kbd_protocol_mode({:?}, {:?})",
             mode,
             config
@@ -196,7 +287,6 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
     /// Uses the 6kro keyboard (both HID Classes should return the same value)
     pub fn get_kbd_protocol_mode(&self) -> HidProtocolMode {
         let mode = self.kbd_6kro.get_protocol_mode().unwrap();
-        log::trace!("HidInterface::get_kbd_protocol_mode() -> {:?}", mode);
         mode
     }
 
@@ -246,7 +336,7 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
         //       0 in USB HID represents no keys pressed, so it's meaningless in a bitmask
         //       Ignore any keys over 231/0xE7
         if key == 0 || key > 0xE7 {
-            log::warn!("Invalid key for nkro_bit({}, {}), ignored.", key, press);
+            defmt::warn!("Invalid key for nkro_bit({}, {}), ignored.", key, press);
             return;
         }
 
@@ -342,13 +432,13 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
 
     fn push_6kro_kbd(&mut self) {
         if let Err(val) = self.kbd_6kro.push_input(&self.kbd_6kro_report) {
-            log::error!("6KRO Buffer Overflow: {:?}", val);
+            defmt::error!("6KRO Buffer Overflow: {:?}", val);
         }
     }
 
     fn push_nkro_kbd(&mut self) {
         if let Err(val) = self.kbd_nkro.push_input(&self.kbd_nkro_report) {
-            log::error!("NKRO Buffer Overflow: {:?}", val);
+            defmt::error!("NKRO Buffer Overflow: {:?}", val);
         }
     }
 
@@ -402,7 +492,7 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
         // Push report
         if updated {
             if let Err(val) = self.mouse.push_input(&self.mouse_report) {
-                log::error!("Mouse Buffer Overflow: {:?}", val);
+                defmt::error!("Mouse Buffer Overflow: {:?}", val);
             }
         }
 
@@ -442,7 +532,7 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
         // Push report
         if updated {
             if let Err(val) = self.ctrl.push_input(&self.ctrl_report) {
-                log::error!("Ctrl Buffer Overflow: {:?}", val);
+                defmt::error!("Ctrl Buffer Overflow: {:?}", val);
             }
         }
     }
@@ -489,20 +579,38 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
         // Check for any incoming packets
         while !interface.rx_bytebuf.is_full() {
             let mut packet = Vec::new();
+            packet.resize_default(N).unwrap();
             match self.hidio.pull_raw_output(&mut packet) {
-                Ok(_size) => {
+                Ok(size) => {
+                    packet.truncate(size);
+                    defmt::trace!("rx packet: {}", packet);
                     interface.rx_bytebuf.enqueue(packet).unwrap();
                 }
-                Err(_) => {
+                Err(UsbError::WouldBlock) => {
+                    // No pending data
+                    break;
+                }
+                Err(e) => {
+                    defmt::warn!(
+                        "Failed to add packet to hidio rx buffer: {} -> {}",
+                        e,
+                        packet
+                    );
                     break;
                 }
             }
+        }
+
+        // Process rx buffer
+        if let Err(e) = interface.process_rx(0) {
+            defmt::warn!("process_rx failed -> {}", e);
         }
 
         // Push as many packets as possible
         while !interface.tx_bytebuf.is_empty() {
             // Don't dequeue yet, we might not be able to send
             let packet = interface.tx_bytebuf.peek().unwrap();
+            defmt::trace!("tx packet: {}", packet);
 
             // Attempt to push
             match self.hidio.push_raw_input(packet) {
@@ -510,7 +618,12 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
                     // Dequeue
                     interface.tx_bytebuf.dequeue().unwrap();
                 }
-                Err(_) => {
+                Err(UsbError::WouldBlock) => {
+                    // USB Endpoint buffer is likely full
+                    break;
+                }
+                Err(e) => {
+                    defmt::warn!("Failed to push hidio tx packet: {} -> {}", e, packet);
                     break;
                 }
             }
