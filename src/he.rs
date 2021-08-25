@@ -94,14 +94,11 @@ pub unsafe extern "C" fn he_scan_event(
     };
 
     match intf.add::<SENSE_ACCUMULATION>(index as usize, val) {
-        Ok(data) => {
-            if let Some(data) = data {
-                *analysis = data.clone();
-                HeStatus::AnalysisReady
-            } else {
-                HeStatus::Success
-            }
+        Ok(Some(data)) => {
+            *analysis = data.clone();
+            HeStatus::AnalysisReady
         }
+        Ok(None) => HeStatus::Success,
         Err(err) => match err {
             SensorError::CalibrationError(data) => match data.cal {
                 CalibrationStatus::NotReady => HeStatus::ErrorSensorNotReady,
@@ -138,14 +135,11 @@ pub unsafe extern "C" fn he_test_event(
             index as usize,
             val,
         ) {
-        Ok(data) => {
-            if let Some(data) = data {
-                *analysis = data.clone();
-                HeStatus::AnalysisReady
-            } else {
-                HeStatus::Success
-            }
+        Ok(Some(data)) => {
+            *analysis = data.clone();
+            HeStatus::AnalysisReady
         }
+        Ok(None) => HeStatus::Success,
         Err(err) => match err {
             SensorError::CalibrationError(data) => match data.cal {
                 CalibrationStatus::MagnetWrongPoleOrMissing => {
