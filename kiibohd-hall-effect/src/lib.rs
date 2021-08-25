@@ -14,11 +14,25 @@ mod test;
 
 // ----- Crates -----
 
-use heapless::Vec;
-#[cfg(not(any(feature = "defmt-default", feature = "defmt-trace", feature = "defmt-debug", feature = "defmt-info", feature = "defmt-warn", feature = "defmt-error")))]
-use log::*;
-#[cfg(any(feature = "defmt-default", feature = "defmt-trace", feature = "defmt-debug", feature = "defmt-info", feature = "defmt-warn", feature = "defmt-error"))]
+#[cfg(any(
+    feature = "defmt-default",
+    feature = "defmt-trace",
+    feature = "defmt-debug",
+    feature = "defmt-info",
+    feature = "defmt-warn",
+    feature = "defmt-error"
+))]
 use defmt::*;
+use heapless::Vec;
+#[cfg(not(any(
+    feature = "defmt-default",
+    feature = "defmt-trace",
+    feature = "defmt-debug",
+    feature = "defmt-info",
+    feature = "defmt-warn",
+    feature = "defmt-error"
+)))]
+use log::*;
 
 // TODO Use features to determine which lookup table to use
 use rawlookup::MODEL;
