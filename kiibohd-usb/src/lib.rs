@@ -200,7 +200,7 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
         #[cfg(feature = "mouse")] mouse_consumer: Consumer<'a, MouseState, MOUSE_SIZE>,
         ctrl_consumer: Consumer<'a, CtrlState, CTRL_SIZE>,
     ) -> HidInterface<'a, B, KBD_SIZE, MOUSE_SIZE, CTRL_SIZE> {
-        let kbd_6kro = HIDClass::new_ep_in(
+        let kbd_6kro = HIDClass::new_ep_in_with_settings(
             alloc,
             KeyboardReport::desc(),
             10,
@@ -211,7 +211,7 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
                 locale,
             },
         );
-        let kbd_nkro = HIDClass::new_ep_in(
+        let kbd_nkro = HIDClass::new_ep_in_with_settings(
             alloc,
             KeyboardNkroReport::desc(),
             10,
@@ -226,13 +226,12 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
             alloc,
             SysCtrlConsumerCtrlReport::desc(),
             10,
-            HidClassSettings::default(),
         );
         #[cfg(feature = "mouse")]
         let mouse =
-            HIDClass::new_ep_in(alloc, MouseReport::desc(), 10, HidClassSettings::default());
+            HIDClass::new_ep_in(alloc, MouseReport::desc(), 10);
         #[cfg(feature = "hidio")]
-        let hidio = HIDClass::new(alloc, HidioReport::desc(), 10, HidClassSettings::default());
+        let hidio = HIDClass::new(alloc, HidioReport::desc(), 10);
 
         HidInterface {
             kbd_6kro,
