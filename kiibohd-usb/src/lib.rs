@@ -84,8 +84,9 @@ pub enum CtrlState {
 ///   larger buffers (e.g. double buffering)
 ///
 /// Example Usage (atsam4s)
-/// ```
+/// ```rust,ignore
 /// use heapless::spsc::Queue;
+/// use usbd_hid::hid_class::{HidCountryCode, HidProtocolMode, ProtocolModeConfig};
 ///
 /// // These define the maximum pending items in each queue
 /// const KBD_QUEUE_SIZE: usize = 10; // This would limit NKRO mode to 10KRO
@@ -222,14 +223,9 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
                 locale,
             },
         );
-        let ctrl = HIDClass::new_ep_in(
-            alloc,
-            SysCtrlConsumerCtrlReport::desc(),
-            10,
-        );
+        let ctrl = HIDClass::new_ep_in(alloc, SysCtrlConsumerCtrlReport::desc(), 10);
         #[cfg(feature = "mouse")]
-        let mouse =
-            HIDClass::new_ep_in(alloc, MouseReport::desc(), 10);
+        let mouse = HIDClass::new_ep_in(alloc, MouseReport::desc(), 10);
         #[cfg(feature = "hidio")]
         let hidio = HIDClass::new(alloc, HidioReport::desc(), 10);
 
@@ -285,8 +281,7 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
     /// Retrieves the current protocol mode
     /// Uses the 6kro keyboard (both HID Classes should return the same value)
     pub fn get_kbd_protocol_mode(&self) -> HidProtocolMode {
-        let mode = self.kbd_6kro.get_protocol_mode().unwrap();
-        mode
+        self.kbd_6kro.get_protocol_mode().unwrap()
     }
 
     /// Used to pass all of the interfaces to usb_dev.poll()

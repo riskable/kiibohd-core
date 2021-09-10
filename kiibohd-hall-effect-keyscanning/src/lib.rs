@@ -15,7 +15,7 @@ use kiibohd_hall_effect::{SenseAnalysis, SensorError, Sensors};
 /// well across oneshot, interrupt based and DMA ADC read methods.
 /// (usually requires quite a bit of MCU specific setup as well)
 ///
-/// ```
+/// ```rust,ignore
 /// const CSIZE: usize = 18; // Number of columns
 /// const RSIZE: usize = 6; // Number of rows
 /// const MSIZE: usize = RSIZE * CSIZE; // Total matrix size

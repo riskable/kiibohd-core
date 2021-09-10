@@ -33,6 +33,9 @@ members = [
   "kiibohd-keyscanning",
   "kiibohd-log",
   "kiibohd-usb",
+  "kll-core",
+  "kll-hid",
+  "kll-macros",
 ]
 
 
