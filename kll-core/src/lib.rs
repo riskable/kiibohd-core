@@ -14,6 +14,7 @@
 extern crate static_assertions;
 
 pub mod layout;
+pub mod macros;
 
 pub mod hid {
     #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
