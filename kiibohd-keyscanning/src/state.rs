@@ -1,166 +1,114 @@
 // Copyright 2021 Zion Koyl
+// Copyright 2021 Jacob Alexander
 //
 // Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
 // http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-#[allow(unused_imports)]
-use core::convert::Infallible;
-use embedded_time::{duration::*, rate::*};
-
-#[derive(PartialEq, Copy, Clone, Debug)]
+#[derive(PartialEq, Copy, Clone, Debug, defmt::Format)]
 pub enum State {
-    Pressed,
-    Bouncing,
-    Released,
-    Idle,
-    Held,
+    On,
+    Off,
 }
 
-#[derive(PartialEq, Copy, Clone)]
-pub struct StateReturn {
-    pub state_change: bool,
-    pub ending_state: State,
-}
-
-/// The KeyState handles all of the decision making and state changes based on a high signal from the GPIO, or a low signal
+/// The KeyState handles all of the decision making and state changes based on a high or low signal from a GPIO pin
 #[derive(Copy, Clone)]
-pub struct KeyState {
+pub struct KeyState<const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, const IDLE_MS: u32> {
+    /// Most recently GPIO reading (not debounced)
+    raw_state: State,
+
+    /// True key state after debounce processing (debounced)
     state: State,
-    prev_state: State,
-    pressed_dur: Milliseconds,
-    bouncing_dur: Milliseconds,
-    released_dur: Milliseconds,
-    held_dur: Milliseconds,
-    bounce_limit: Milliseconds,
-    idle_time: Milliseconds,
-    scan_period: Microseconds,
-    held_limit: Milliseconds,
-    idle_limit: Milliseconds,
+
+    /// Used to determine if the key is idle (in Off state for IDLE_MS)
+    idle: bool,
+
+    /// Used to track the number of cycles since state has changed.
+    cycles_since_state_change: u32,
+
+    /// This is used to track the list GPIO read bounce
+    ///
+    /// If cycles * scan_period > DEBOUNCE_US then raw_state is assigned to state.
+    cycles_since_last_bounce: u32,
 }
 
-impl KeyState {
-    pub fn new(
-        bounce_lim: Milliseconds,
-        held_lim: Milliseconds,
-        idle_lim: Milliseconds,
-        scan_pd: Microseconds,
-    ) -> KeyState {
-        KeyState {
-            state: State::Released,             // Current key state
-            prev_state: State::Released,        // Previous key state
-            pressed_dur: 0_u32.milliseconds(), // Duration(ms) the key has been pressed(after debouncing)
-            bouncing_dur: 0_u32.milliseconds(), // Duration(ms) the key has been debouncing
-            released_dur: 0_u32.milliseconds(), // Duration(ms) the key has been released
-            held_dur: 0_u32.milliseconds(),    // Duration(ms) the key has been held
-            bounce_limit: bounce_lim, // Duration(ms) that the key has to be high to be considered debounced
-            idle_time: 0_u32.milliseconds(), // Duration(ms) the key has been idle
-            scan_period: scan_pd,     // the period of time(microseconds) that the scan takes
-            held_limit: held_lim, // Duration(ms) that the key needs to be pressed to be considered held
-            idle_limit: idle_lim, // Duration(ms) that the key needs to be released to be considered idle
+impl<const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, const IDLE_MS: u32>
+    KeyState<SCAN_PERIOD_US, DEBOUNCE_US, IDLE_MS>
+{
+    pub fn new() -> Self {
+        Self {
+            raw_state: State::Off,
+            state: State::Off,
+            idle: false,
+            cycles_since_state_change: 0,
+            cycles_since_last_bounce: 0,
         }
     }
 
-    pub fn get_state(&self) -> State {
-        self.state
+    /// Record the GPIO read event and adjust debounce state machine accordingly
+    ///
+    /// Returns:
+    /// (State, idle, cycles_since_state_change)
+    pub fn record(&mut self, on: bool) -> (State, bool, u32) {
+        // Update the raw state as a bounce event if not the same as the previous scan iteration
+        // e.g. GPIO read value has changed since the last iteration
+        if on && self.raw_state == State::Off || !on && self.raw_state == State::On {
+            // Update raw state
+            self.raw_state = if on { State::On } else { State::Off };
+
+            // Reset bounce cycle counter
+            self.cycles_since_last_bounce = 0;
+
+            // Return current state
+            return self.state();
+        }
+
+        // Increment debounce cycle counter
+        self.cycles_since_last_bounce += 1;
+
+        // Update the debounced state if it has changed and exceeded the debounce timer
+        // (debounce timer resets if there is any bouncing during the debounce interval).
+        if self.cycles_since_last_bounce * SCAN_PERIOD_US >= DEBOUNCE_US
+            && self.raw_state != self.state
+        {
+            // Update state
+            self.state = self.raw_state;
+
+            // Reset state transition cycle counter
+            self.cycles_since_state_change = 0;
+
+            // No longer idle
+            self.idle = false;
+
+            // Return current state
+            return self.state();
+        }
+
+        // Increment state cycle counter
+        self.cycles_since_state_change += 1;
+
+        // Determine if key is idle
+        // Must be both in the off state and have been off >= IDLE_MS
+        self.idle = self.state == State::Off
+            && self.cycles_since_state_change * SCAN_PERIOD_US / 1000 >= IDLE_MS;
+
+        // Return current state
+        self.state()
     }
 
-    /// The result of the last scan gets sent here and thie function determines the actual state change of the key.
-    /// This function returns (state change, ending state)
-    pub fn poll_update(&mut self, on: bool) -> StateReturn {
-        let zero: Milliseconds = 0_u32.milliseconds();
-        let scan_period: Milliseconds = self.scan_period.into();
-        let mut state_chng: bool = false;
-        self.prev_state = self.state;
+    /// Returns thet current state and cycles since the state changed
+    ///
+    /// (State, idle, cycles_since_state_change)
+    pub fn state(&self) -> (State, bool, u32) {
+        (self.state, self.idle, self.cycles_since_state_change)
+    }
+}
 
-        if !on {
-            // if the GPIO reads the input pin low
-            match self.prev_state {
-                State::Pressed => {
-                    // if the previous state was pressed and the input is read as low
-                    self.state = State::Released;
-                    self.pressed_dur = zero;
-                    state_chng = true;
-                }
-                State::Bouncing => {
-                    // the previous state was bouncing and the output was read as low
-                    self.state = State::Released;
-                    self.bouncing_dur = zero;
-                    state_chng = true;
-                }
-                State::Released => {
-                    // if the previous state was released and the input is still low
-                    if self.released_dur >= self.idle_limit {
-                        // The key was Released and is now considered idle
-                        self.state = State::Idle;
-                        self.released_dur = zero;
-                        state_chng = true;
-                    } else {
-                        // The key was released, but is not yet idle
-                        self.state = State::Released;
-                        self.released_dur = self.released_dur + scan_period;
-                    }
-                }
-                State::Idle => {
-                    // if the previous state was idle and the input is still read as low
-                    self.state = State::Idle;
-                    self.idle_time = self.idle_time + scan_period;
-                }
-                State::Held => {
-                    self.state = State::Released;
-                    self.held_dur = zero;
-                    state_chng = true;
-                }
-            }
-        } else if on {
-            // if the GPIO reads the input pin on
-            match self.prev_state {
-                State::Pressed => {
-                    if self.pressed_dur >= self.held_limit {
-                        // if the key was pressed
-                        self.state = State::Held;
-                        state_chng = true;
-                    } else {
-                        self.state = State::Pressed;
-                        self.pressed_dur = self.pressed_dur + scan_period;
-                    }
-                }
-                State::Bouncing => {
-                    if self.bouncing_dur >= self.bounce_limit {
-                        // The key has been pressed longer than the debounce limit and is officialyl pressed
-                        self.state = State::Pressed;
-                        self.bouncing_dur = zero;
-                        state_chng = true;
-                    } else {
-                        // The key is still in the debounce phase
-                        self.state = State::Bouncing;
-                        self.bouncing_dur = self.bouncing_dur + scan_period;
-                    }
-                }
-                State::Released => {
-                    // The key was released, but now the GPIO reads high
-                    self.state = State::Bouncing;
-                    self.released_dur = zero;
-                    state_chng = true;
-                }
-                State::Idle => {
-                    // The key was idle, but is now bouncing
-                    self.state = State::Bouncing;
-                    self.idle_time = zero;
-                    state_chng = true;
-                }
-                State::Held => {
-                    // The key was held, and is still held
-                    self.state = State::Held;
-                    self.held_dur = self.held_dur + scan_period;
-                }
-            }
-        }
-
-        StateReturn {
-            state_change: state_chng,
-            ending_state: self.state,
-        }
+impl<const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, const IDLE_MS: u32> Default
+    for KeyState<SCAN_PERIOD_US, DEBOUNCE_US, IDLE_MS>
+{
+    fn default() -> Self {
+        Self::new()
     }
 }

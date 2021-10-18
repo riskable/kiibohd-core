@@ -1,4 +1,5 @@
 // Copyright 2021 Zion Koyl
+// Copyright 2021 Jacob Alexander
 //
 // Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
 // http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
@@ -6,119 +7,222 @@
 // copied, modified, or distributed except according to those terms.
 
 #![no_std]
-#[allow(unused_imports)]
-#[allow(unused_attributes)]
-/// This crate is to handle scanning and strobing of the key matrix.
-/// It also handles the debouncing of key input to ensure acurate keypresses are being read.
-/// InputPin's, and OutputPin's are passed in through the "rows" and "cols" parameters in the Scan::new() function.
-/// The maximum number of rows is 7, and the maximum number of columns is 20. This number may need adjusted through testing.
-pub mod state;
-pub use self::state::{KeyState, State, StateReturn};
-use embedded_hal::digital::v2::{InputPin, OutputPin};
-use embedded_time::duration::*;
-use generic_array::{ArrayLength, GenericArray};
-use keyberon::matrix::HeterogenousArray;
 
-pub struct Matrix<C, R> {
-    // The matrix of inputs, and outputs, and the state of each key
-    pub cols: C,
-    pub rows: R,
-    pub state_matrix: StateMatrix,
+pub mod state;
+
+pub use self::state::{KeyState, State};
+use embedded_hal::digital::v2::{InputPin, IoPin, OutputPin, PinState};
+
+/// Records momentary push button events
+///
+/// Cycles can be converted to time by multiplying by the scan period (Matrix::period())
+#[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+pub enum KeyEvent {
+    On {
+        /// Cycles since the last state change
+        cycles_since_state_change: u32,
+    },
+    Off {
+        /// Key is idle (a key can only be idle in the off state)
+        idle: bool,
+        /// Cycles since the last state change
+        cycles_since_state_change: u32,
+    },
 }
 
-impl<C, R> Matrix<C, R> {
-    pub fn new<E>(cols: C, rows: R, scan_period: Microseconds) -> Result<Self, E>
+/// This struct handles scanning and strobing of the key matrix.
+///
+/// It also handles the debouncing of key input to ensure acurate keypresses are being read.
+/// OutputPin's are passed as columns (cols) which are strobed.
+/// IoPins are functionally InputPins (rows) which are read. Rows are IoPins in order to drain the
+/// row/sense between strobes to prevent stray capacitance.
+///
+/// ```rust,ignore
+/// const CSIZE: usize = 18; // Number of columns
+/// const RSIZE: usize = 6; // Number of rows
+/// const MSIZE: usize = RSIZE * CSIZE; // Total matrix size
+/// // Period of time it takes to re-scan a column (everything must be constant time!)
+/// const SCAN_PERIOD_US = 1000;
+/// // Debounce timer in us. Can only be as precise as a multiple of SCAN_PERIOD_US.
+/// // Per-key timer is reset if the raw gpio reading changes for any reason.
+/// const DEBOUNCE_US = 5000; // 5 ms
+/// // Idle timer in ms. Only valid if the switch is in the off state.
+/// const IDLE_MS = 600_0000; // 600 seconds or 10 minutes
+///
+/// let cols = [
+///     pins.strobe1.downgrade(),
+///     pins.strobe2.downgrade(),
+///     pins.strobe3.downgrade(),
+///     pins.strobe4.downgrade(),
+///     pins.strobe5.downgrade(),
+///     pins.strobe6.downgrade(),
+///     pins.strobe7.downgrade(),
+///     pins.strobe8.downgrade(),
+///     pins.strobe9.downgrade(),
+///     pins.strobe10.downgrade(),
+///     pins.strobe11.downgrade(),
+///     pins.strobe12.downgrade(),
+///     pins.strobe13.downgrade(),
+///     pins.strobe14.downgrade(),
+///     pins.strobe15.downgrade(),
+///     pins.strobe16.downgrade(),
+///     pins.strobe17.downgrade(),
+///     pins.strobe18.downgrade(),
+/// ];
+///
+/// let rows = [
+///     pins.sense1.downgrade(),
+///     pins.sense2.downgrade(),
+///     pins.sense3.downgrade(),
+///     pins.sense4.downgrade(),
+///     pins.sense5.downgrade(),
+///     pins.sense6.downgrade(),
+/// ];
+///
+/// // TODO Give real atsam4-hal example with IoPin support
+/// let mut matrix = Matrix::<OutputPin, InputPin, CSIZE, RSIZE, MSIZE, SCAN_PERIOD_US, DEBOUNCE_US,
+/// IDLE_MS>::new(cols, rows);
+///
+/// // Prepare first strobe
+/// matrix.next_strobe().unwrap();
+///
+/// // --> This next part must be done in constant time <--
+/// let state = matrix.sense().unwrap();
+/// matrix.next_strobe().unwrap();
+/// ```
+pub struct Matrix<
+    C: OutputPin,
+    R: InputPin,
+    const CSIZE: usize,
+    const RSIZE: usize,
+    const MSIZE: usize,
+    const SCAN_PERIOD_US: u32,
+    const DEBOUNCE_US: u32,
+    const IDLE_MS: u32,
+> {
+    /// Strobe GPIOs (columns)
+    cols: [C; CSIZE],
+    /// Sense GPIOs (rows)
+    rows: [R; RSIZE],
+    /// Current GPIO column being strobed
+    cur_strobe: usize,
+    /// Recorded state of the entire matrix
+    state_matrix: [KeyState<SCAN_PERIOD_US, DEBOUNCE_US, IDLE_MS>; MSIZE],
+}
+
+impl<
+        C: OutputPin,
+        R: InputPin,
+        const CSIZE: usize,
+        const RSIZE: usize,
+        const MSIZE: usize,
+        const SCAN_PERIOD_US: u32,
+        const DEBOUNCE_US: u32,
+        const IDLE_MS: u32,
+    > Matrix<C, R, CSIZE, RSIZE, MSIZE, SCAN_PERIOD_US, DEBOUNCE_US, IDLE_MS>
+{
+    pub fn new<'a, E: 'a>(cols: [C; CSIZE], rows: [R; RSIZE]) -> Result<Self, E>
     where
-        for<'a> &'a mut C: IntoIterator<Item = &'a mut dyn OutputPin<Error = E>>,
+        E: core::convert::From<<C as OutputPin>::Error>,
     {
-        let state_matrix = StateMatrix::new(
-            5_u32.milliseconds(),
-            500_u32.milliseconds(),
-            700_u32.milliseconds(),
-            scan_period,
-        ); // (debounce-duration, held-duration, idle-duration, scan-period)
+        let state_matrix = [KeyState::<SCAN_PERIOD_US, DEBOUNCE_US, IDLE_MS>::new(); MSIZE];
         let mut res = Self {
             cols,
             rows,
+            cur_strobe: CSIZE - 1,
             state_matrix,
         };
+
+        // Reset strobe position and make sure all strobes are off
         res.clear()?;
         Ok(res)
     }
 
+    /// Clears strobes
+    /// Resets strobe counter to the last element (so next_strobe starts at 0)
     pub fn clear<'a, E: 'a>(&'a mut self) -> Result<(), E>
     where
-        &'a mut C: IntoIterator<Item = &'a mut dyn OutputPin<Error = E>>,
+        C: OutputPin<Error = E>,
     {
-        for c in self.cols.into_iter() {
-            c.set_low().ok().unwrap();
+        // Clear all strobes
+        for c in self.cols.iter_mut() {
+            c.set_low()?;
         }
+
+        // Reset strobe position
+        self.cur_strobe = CSIZE - 1;
         Ok(())
     }
 
-    /// This is the main matrix scanning function.
-    /// The function iterates over the array of columns, sets them high, then iterates over the
-    /// array of rows and reads their state.
-    /// For each key that's state has changed since last scan the "callback" function is executed.
-    /// The idea for the callback is that you can use your own handling of state changes
-    /// independent of the scanning module.
-    pub fn get<'a, E: 'a>(&'a mut self, callback: fn(StateReturn, usize, bool)) -> Result<(), E>
+    /// Next strobe
+    pub fn next_strobe<'a, E: 'a>(&'a mut self) -> Result<usize, E>
     where
-        &'a mut C: IntoIterator<Item = &'a mut dyn OutputPin<Error = E>>,
-        C: HeterogenousArray,
-        C::Len: ArrayLength<GenericArray<bool, R::Len>>,
-        C::Len: heapless::ArrayLength<GenericArray<bool, R::Len>>,
-        &'a R: IntoIterator<Item = &'a dyn InputPin<Error = E>>,
-        R: HeterogenousArray,
-        R::Len: ArrayLength<bool>,
-        R::Len: heapless::ArrayLength<bool>,
+        C: OutputPin<Error = E> + IoPin<R, C>,
+        R: Clone + InputPin<Error = E> + IoPin<R, C>,
+        E: core::convert::From<<R as IoPin<R, C>>::Error>,
     {
-        let rows = &self.rows;
-        let state_matrix = &mut self.state_matrix;
-        for (i, c) in self.cols.into_iter().enumerate() {
-            c.set_high().ok().unwrap();
-            for (j, r) in rows.into_iter().enumerate() {
-                let on = r.is_high().ok().unwrap();
-                let state: StateReturn = state_matrix.poll_update(j, i, on);
-                callback(state, state_matrix.get_scancode(j, i), on);
-            }
-            c.set_low().ok().unwrap();
+        // Unset current strobe
+        self.cols[self.cur_strobe].set_low()?;
+
+        // Drain stray potential from sense lines
+        for s in self.rows.iter_mut() {
+            // Temporarily sink sense gpios
+            s.clone().into_output_pin(PinState::Low)?;
+            // Reset to sense/read gpio
+            s.clone().into_input_pin()?;
         }
 
-        Ok(())
-    }
-}
-
-/// The matrix to keep all the key states and handle state updating
-pub struct StateMatrix {
-    keys: [[KeyState; 7]; 20],
-}
-
-impl StateMatrix {
-    pub fn new(
-        bounce_limit: Milliseconds,
-        held_limit: Milliseconds,
-        idle_limit: Milliseconds,
-        scan_period: Microseconds,
-    ) -> StateMatrix {
-        StateMatrix {
-            // Create a two dimensional array of key states with a debounce delay of 5ms, a hold time of 5ms, and an idle limit of 500ms
-            keys: [[KeyState::new(bounce_limit, held_limit, idle_limit, scan_period); 7]; 20],
+        // Check for roll-over condition
+        if self.cur_strobe >= CSIZE - 1 {
+            self.cur_strobe = 0;
+        } else {
+            self.cur_strobe += 1;
         }
+
+        // Set new strobe
+        self.cols[self.cur_strobe].set_high()?;
+
+        Ok(self.cur_strobe)
     }
 
-    // Update the individual KeyStates in the array\
-    //TODO Do something with the returned StateReturn
-    pub fn poll_update(&mut self, r: usize, c: usize, high: bool) -> StateReturn {
-        KeyState::poll_update(&mut self.keys[r][c], high)
+    /// Current strobe
+    pub fn strobe(&self) -> usize {
+        self.cur_strobe
     }
 
-    // Get the individual state of a specific key
-    pub fn get_state(&self, r: usize, c: usize) -> State {
-        KeyState::get_state(&self.keys[r][c])
-    }
+    /// Sense a column of switches
+    ///
+    /// Returns the results of each row for the currently strobed column
+    pub fn sense<'a, E: 'a>(&'a mut self) -> Result<[KeyEvent; RSIZE], E>
+    where
+        E: core::convert::From<<R as InputPin>::Error>,
+    {
+        let mut res = [KeyEvent::Off {
+            idle: false,
+            cycles_since_state_change: 0,
+        }; RSIZE];
 
-    pub fn get_scancode(&self, r: usize, c: usize) -> usize {
-        c + (19 * r)
+        for (i, r) in self.rows.iter().enumerate() {
+            // Read GPIO
+            let on = r.is_high()?;
+            // Determine matrix index
+            let index = self.cur_strobe * RSIZE + i;
+            // Record GPIO event and determine current status after debouncing algorithm
+            let (keystate, idle, cycles_since_state_change) = self.state_matrix[index].record(on);
+
+            // Assign KeyEvent using the output keystate
+            res[i] = if keystate == State::On {
+                KeyEvent::On {
+                    cycles_since_state_change,
+                }
+            } else {
+                KeyEvent::Off {
+                    idle,
+                    cycles_since_state_change,
+                }
+            };
+        }
+
+        Ok(res)
     }
 }
