@@ -15,29 +15,36 @@ pub struct Macro<const TSIZE: usize, const CSIZE: usize> {
 }
 
 impl<const TSIZE: usize, const CSIZE: usize> Macro<TSIZE, CSIZE> {
-    fn new(inputs: Queue<TriggerEvent, TSIZE>, outputs: Queue<CapabilityRun, CSIZE>) -> Macro<TSIZE, CSIZE> {
+    pub fn new(
+        inputs: Queue<TriggerEvent, TSIZE>,
+        outputs: Queue<CapabilityRun, CSIZE>,
+    ) -> Macro<TSIZE, CSIZE> {
         Macro { inputs, outputs }
     }
 
-    fn process(&mut self) {
+    pub fn process(&mut self) {
         while let Some(input) = self.inputs.dequeue() {
-            self.outputs.enqueue(match input {
-                _ => CapabilityRun::NoOp { state: CapabilityEvent::Passthrough(input) },
-                // TriggerEvent::None => ,
-                // TriggerEvent::Switch => ,
-                // TriggerEvent::HidLed=> ,
-                // TriggerEvent::AnalogDistance=>,
-                // TriggerEvent::AnalogVelocity=>,
-                // TriggerEvent::AnalogAcceleration=>,
-                // TriggerEvent::AnalogJerk=>,
-                // TriggerEvent::Layer=>,
-                // TriggerEvent::Animation=>,
-                // TriggerEvent::Sleep=>,
-                // TriggerEvent::Resume=>,
-                // TriggerEvent::Inactive=>,
-                // TriggerEvent::Active=>,
-                // TriggerEvent::Rotation=>,
-            }).unwrap();
+            self.outputs
+                .enqueue(match input {
+                    _ => CapabilityRun::NoOp {
+                        state: CapabilityEvent::Passthrough(input),
+                    },
+                    // TriggerEvent::None => ,
+                    // TriggerEvent::Switch => ,
+                    // TriggerEvent::HidLed=> ,
+                    // TriggerEvent::AnalogDistance=>,
+                    // TriggerEvent::AnalogVelocity=>,
+                    // TriggerEvent::AnalogAcceleration=>,
+                    // TriggerEvent::AnalogJerk=>,
+                    // TriggerEvent::Layer=>,
+                    // TriggerEvent::Animation=>,
+                    // TriggerEvent::Sleep=>,
+                    // TriggerEvent::Resume=>,
+                    // TriggerEvent::Inactive=>,
+                    // TriggerEvent::Active=>,
+                    // TriggerEvent::Rotation=>,
+                })
+                .unwrap();
         }
     }
 }
@@ -64,7 +71,12 @@ mod tests {
     fn processing_an_input_queue_adds_capability_runs_to_the_output_queue() {
         let mut inputs = Queue::new();
         inputs.enqueue(TriggerEvent::None).unwrap();
-        inputs.enqueue(TriggerEvent::Resume { state: Activate, last_state: 0 }).unwrap();
+        inputs
+            .enqueue(TriggerEvent::Resume {
+                state: Activate,
+                last_state: 0,
+            })
+            .unwrap();
 
         let mut process_queue: Macro<5, 5> = Macro::new(inputs, Queue::new());
         assert_eq!(process_queue.inputs.len(), 2);
@@ -74,4 +86,3 @@ mod tests {
         assert_eq!(process_queue.outputs.len(), 2);
     }
 }
-
