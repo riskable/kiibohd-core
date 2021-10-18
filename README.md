@@ -35,8 +35,12 @@ cargo +nightly cbuild --target thumbv7em-none-eabi --release
 
 ## Testing
 
-```bash
-cargo test --all --features std
-```
+Can be used as a quick sanity for all the modules.
 
-**NOTE**: `--features std` has to be added to cargo test to get around unfortunate problems with how `no_std` and test code works.
+```bash
+cargo build --all
+cargo clippy --all
+cargo fmt --all
+cargo test --all
+cargo doc --all
+```

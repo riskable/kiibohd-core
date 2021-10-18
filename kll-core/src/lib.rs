@@ -6,9 +6,10 @@
 // copied, modified, or distributed except according to those terms.
 
 #![no_std]
-#![feature(const_slice_from_raw_parts)]
-#![feature(const_raw_ptr_deref)]
+#![feature(arbitrary_enum_discriminant)]
 #![feature(const_ptr_read)]
+#![feature(const_raw_ptr_deref)]
+#![feature(const_slice_from_raw_parts)]
 
 #[macro_use]
 extern crate static_assertions;

@@ -22,6 +22,7 @@ std = []
 
 # Used when compiling as a static library
 lib = []
+capi = []
 
 
 [workspace]
