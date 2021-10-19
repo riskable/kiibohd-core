@@ -64,3 +64,5 @@ Cargo.lock
 # Backup files from rustfmt
 **/*.rs.bk
 
+# intellij idea project folder
+.idea

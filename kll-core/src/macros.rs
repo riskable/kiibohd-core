@@ -7,7 +7,7 @@
 
 use heapless::spsc::Queue;
 
-use crate::{CapabilityEvent, CapabilityRun, TriggerEvent};
+use crate::{CapabilityRun, TriggerEvent};
 
 pub struct Macro<const TSIZE: usize, const CSIZE: usize> {
     inputs: Queue<TriggerEvent, TSIZE>,
@@ -24,27 +24,7 @@ impl<const TSIZE: usize, const CSIZE: usize> Macro<TSIZE, CSIZE> {
 
     pub fn process(&mut self) {
         while let Some(input) = self.inputs.dequeue() {
-            self.outputs
-                .enqueue(match input {
-                    _ => CapabilityRun::NoOp {
-                        state: CapabilityEvent::Passthrough(input),
-                    },
-                    // TriggerEvent::None => ,
-                    // TriggerEvent::Switch => ,
-                    // TriggerEvent::HidLed=> ,
-                    // TriggerEvent::AnalogDistance=>,
-                    // TriggerEvent::AnalogVelocity=>,
-                    // TriggerEvent::AnalogAcceleration=>,
-                    // TriggerEvent::AnalogJerk=>,
-                    // TriggerEvent::Layer=>,
-                    // TriggerEvent::Animation=>,
-                    // TriggerEvent::Sleep=>,
-                    // TriggerEvent::Resume=>,
-                    // TriggerEvent::Inactive=>,
-                    // TriggerEvent::Active=>,
-                    // TriggerEvent::Rotation=>,
-                })
-                .unwrap();
+            self.outputs.enqueue(input.into()).unwrap();
         }
     }
 }
@@ -52,10 +32,11 @@ impl<const TSIZE: usize, const CSIZE: usize> Macro<TSIZE, CSIZE> {
 #[cfg(test)]
 mod tests {
     use heapless::spsc::Queue;
+    use kll_hid::Keyboard;
 
     use crate::macros::Macro;
-    use crate::trigger::Aodo::Activate;
-    use crate::TriggerEvent;
+    use crate::trigger::Phro;
+    use crate::{CapabilityEvent, CapabilityRun, TriggerEvent};
 
     #[test]
     fn processing_empty_input_queue_results_in_nothing_being_added_to_the_output_queue() {
@@ -72,8 +53,9 @@ mod tests {
         let mut inputs = Queue::new();
         inputs.enqueue(TriggerEvent::None).unwrap();
         inputs
-            .enqueue(TriggerEvent::Resume {
-                state: Activate,
+            .enqueue(TriggerEvent::Switch {
+                state: Phro::Hold,
+                index: 0,
                 last_state: 0,
             })
             .unwrap();
@@ -84,5 +66,27 @@ mod tests {
         process_queue.process();
         assert_eq!(process_queue.inputs.len(), 0);
         assert_eq!(process_queue.outputs.len(), 2);
+    }
+
+    #[test]
+    fn check_processing_events_converts_to_the_expected_output() {
+        let mut inputs = Queue::new();
+        inputs
+            .enqueue(TriggerEvent::Switch {
+                state: Phro::Press,
+                index: Keyboard::Z.into(),
+                last_state: 0,
+            })
+            .unwrap();
+
+        let mut process_queue: Macro<5, 5> = Macro::new(inputs, Queue::new());
+        process_queue.process();
+        assert_eq!(
+            process_queue.outputs.dequeue().unwrap(),
+            CapabilityRun::HidKeyboard {
+                state: CapabilityEvent::Initial,
+                id: Keyboard::Z
+            }
+        );
     }
 }

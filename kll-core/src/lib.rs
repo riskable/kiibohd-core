@@ -14,6 +14,7 @@
 #[macro_use]
 extern crate static_assertions;
 
+mod converters;
 pub mod layout;
 pub mod macros;
 

@@ -283,6 +283,22 @@ pub enum Keyboard {
     RightGUI = 0xE7,
 }
 
+/// Conversion from u16 indexes to Keyboard enum
+/// # Safety
+impl From<u16> for Keyboard {
+    fn from(index: u16) -> Keyboard {
+        unsafe { core::mem::transmute(index as u8) }
+    }
+}
+
+/// Conversion from Keyboard enum to u16
+/// # Safety
+impl From<Keyboard> for u16 {
+    fn from(index: Keyboard) -> u16 {
+        unsafe { core::mem::transmute(index as u16) }
+    }
+}
+
 /// HID LED Indicators
 /// List of LED codes - USB HID 1.12v2 pg 61
 #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
