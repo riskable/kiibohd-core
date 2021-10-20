@@ -6,10 +6,23 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use core::ops::Not;
+
 #[derive(PartialEq, Copy, Clone, Debug, defmt::Format)]
 pub enum State {
     On,
     Off,
+}
+
+impl Not for State {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        match self {
+            State::On => State::Off,
+            State::Off => State::On,
+        }
+    }
 }
 
 /// The KeyState handles all of the decision making and state changes based on a high or low signal from a GPIO pin
@@ -23,6 +36,17 @@ pub struct KeyState<const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, const IDL
 
     /// Used to determine if the key is idle (in Off state for IDLE_MS)
     idle: bool,
+
+    /// Tracking bounce
+    debounce_tracking: bool,
+
+    /// Used to determine the state after debounce
+    /// Increments if a value is not what's set as state.
+    /// Decrements if the value is already set as state.
+    /// If positive set to On
+    /// If negative set to Off
+    /// This value is reset to 0 after setting the new state
+    raw_state_average: i32,
 
     /// Used to track the number of cycles since state has changed.
     cycles_since_state_change: u32,
@@ -41,6 +65,8 @@ impl<const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, const IDLE_MS: u32>
             raw_state: State::Off,
             state: State::Off,
             idle: false,
+            debounce_tracking: false,
+            raw_state_average: 0,
             cycles_since_state_change: 0,
             cycles_since_last_bounce: 0,
         }
@@ -51,6 +77,16 @@ impl<const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, const IDLE_MS: u32>
     /// Returns:
     /// (State, idle, cycles_since_state_change)
     pub fn record(&mut self, on: bool) -> (State, bool, u32) {
+        // Track raw state average
+        // This is used to set the new state
+        if self.debounce_tracking {
+            if on && self.state == State::Off || !on && self.state == State::On {
+                self.raw_state_average += 1;
+            } else {
+                self.raw_state_average -= 1;
+            }
+        }
+
         // Update the raw state as a bounce event if not the same as the previous scan iteration
         // e.g. GPIO read value has changed since the last iteration
         if on && self.raw_state == State::Off || !on && self.raw_state == State::On {
@@ -59,6 +95,10 @@ impl<const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, const IDLE_MS: u32>
 
             // Reset bounce cycle counter
             self.cycles_since_last_bounce = 0;
+
+            // Start debounce tracking (if we haven't already started)
+            self.debounce_tracking = true;
+            self.raw_state_average += 1;
 
             // Return current state
             return self.state();
@@ -71,15 +111,29 @@ impl<const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, const IDLE_MS: u32>
         // (debounce timer resets if there is any bouncing during the debounce interval).
         if self.cycles_since_last_bounce * SCAN_PERIOD_US >= DEBOUNCE_US
             && self.raw_state != self.state
+            && self.raw_state_average != 0
         {
             // Update state
-            self.state = self.raw_state;
-
-            // Reset state transition cycle counter
-            self.cycles_since_state_change = 0;
+            // If the average is greater than 0, change the state
+            let new_state = if self.raw_state_average > 0 {
+                !self.state
+            } else {
+                self.state
+            };
 
             // No longer idle
             self.idle = false;
+
+            // Stop debounce tracking
+            self.debounce_tracking = false;
+            self.raw_state_average = 0;
+
+            // Reset state transition cycle counter
+            // and update state if it has changed.
+            if new_state != self.state {
+                self.state = new_state;
+                self.cycles_since_state_change = 0;
+            }
 
             // Return current state
             return self.state();

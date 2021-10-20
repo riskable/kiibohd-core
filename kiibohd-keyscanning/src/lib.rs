@@ -42,7 +42,7 @@ pub enum KeyEvent {
 /// const RSIZE: usize = 6; // Number of rows
 /// const MSIZE: usize = RSIZE * CSIZE; // Total matrix size
 /// // Period of time it takes to re-scan a column (everything must be constant time!)
-/// const SCAN_PERIOD_US = 1000;
+/// const SCAN_PERIOD_US = 40;
 /// // Debounce timer in us. Can only be as precise as a multiple of SCAN_PERIOD_US.
 /// // Per-key timer is reset if the raw gpio reading changes for any reason.
 /// const DEBOUNCE_US = 5000; // 5 ms
@@ -79,14 +79,13 @@ pub enum KeyEvent {
 ///     pins.sense6.downgrade(),
 /// ];
 ///
-/// // TODO Give real atsam4-hal example with IoPin support
 /// let mut matrix = Matrix::<OutputPin, InputPin, CSIZE, RSIZE, MSIZE, SCAN_PERIOD_US, DEBOUNCE_US,
 /// IDLE_MS>::new(cols, rows);
 ///
 /// // Prepare first strobe
 /// matrix.next_strobe().unwrap();
 ///
-/// // --> This next part must be done in constant time <--
+/// // --> This next part must be done in constant time (SCAN_PERIOD_US) <--
 /// let state = matrix.sense().unwrap();
 /// matrix.next_strobe().unwrap();
 /// ```
@@ -123,6 +122,7 @@ impl<
 {
     pub fn new<'a, E: 'a>(cols: [C; CSIZE], rows: [R; RSIZE]) -> Result<Self, E>
     where
+        C: OutputPin<Error = E>,
         E: core::convert::From<<C as OutputPin>::Error>,
     {
         let state_matrix = [KeyState::<SCAN_PERIOD_US, DEBOUNCE_US, IDLE_MS>::new(); MSIZE];
@@ -158,18 +158,25 @@ impl<
     pub fn next_strobe<'a, E: 'a>(&'a mut self) -> Result<usize, E>
     where
         C: OutputPin<Error = E> + IoPin<R, C>,
-        R: Clone + InputPin<Error = E> + IoPin<R, C>,
-        E: core::convert::From<<R as IoPin<R, C>>::Error>,
+        R: InputPin<Error = E> + IoPin<R, C>,
+        E: core::convert::From<<R as IoPin<R, C>>::Error>
+            + core::convert::From<<C as IoPin<R, C>>::Error>,
     {
         // Unset current strobe
         self.cols[self.cur_strobe].set_low()?;
 
         // Drain stray potential from sense lines
+        // NOTE: This is unsafe because the gpio are stored in an array and (likely) do not implement
+        //       copy or clone. Since they are in an array, we can't move them either.
+        //       Since we're just temporarily sinking the pin and putting it back, this is safe to
+        //       do.
         for s in self.rows.iter_mut() {
-            // Temporarily sink sense gpios
-            s.clone().into_output_pin(PinState::Low)?;
-            // Reset to sense/read gpio
-            s.clone().into_input_pin()?;
+            let ptr = s as *const R;
+            unsafe {
+                let row = core::ptr::read(ptr);
+                // Temporarily sink sense gpios and reset to sense/read gpio
+                row.into_output_pin(PinState::Low)?.into_input_pin()?;
+            }
         }
 
         // Check for roll-over condition
@@ -192,8 +199,8 @@ impl<
 
     /// Sense a column of switches
     ///
-    /// Returns the results of each row for the currently strobed column
-    pub fn sense<'a, E: 'a>(&'a mut self) -> Result<[KeyEvent; RSIZE], E>
+    /// Returns the results of each row for the currently strobed column and the measured strobe
+    pub fn sense<'a, E: 'a>(&'a mut self) -> Result<([KeyEvent; RSIZE], usize), E>
     where
         E: core::convert::From<<R as InputPin>::Error>,
     {
@@ -223,6 +230,6 @@ impl<
             };
         }
 
-        Ok(res)
+        Ok((res, self.cur_strobe))
     }
 }
