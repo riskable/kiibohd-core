@@ -27,7 +27,12 @@ impl Not for State {
 
 /// The KeyState handles all of the decision making and state changes based on a high or low signal from a GPIO pin
 #[derive(Copy, Clone)]
-pub struct KeyState<const CSIZE: usize, const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, const IDLE_MS: u32> {
+pub struct KeyState<
+    const CSIZE: usize,
+    const SCAN_PERIOD_US: u32,
+    const DEBOUNCE_US: u32,
+    const IDLE_MS: u32,
+> {
     /// Most recently GPIO reading (not debounced)
     raw_state: State,
 
@@ -159,8 +164,8 @@ impl<const CSIZE: usize, const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, cons
     }
 }
 
-impl<const CSIZE: usize, const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, const IDLE_MS: u32> Default
-    for KeyState<CSIZE, SCAN_PERIOD_US, DEBOUNCE_US, IDLE_MS>
+impl<const CSIZE: usize, const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, const IDLE_MS: u32>
+    Default for KeyState<CSIZE, SCAN_PERIOD_US, DEBOUNCE_US, IDLE_MS>
 {
     fn default() -> Self {
         Self::new()
