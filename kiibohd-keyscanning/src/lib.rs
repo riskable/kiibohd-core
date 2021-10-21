@@ -106,7 +106,7 @@ pub struct Matrix<
     /// Current GPIO column being strobed
     cur_strobe: usize,
     /// Recorded state of the entire matrix
-    state_matrix: [KeyState<SCAN_PERIOD_US, DEBOUNCE_US, IDLE_MS>; MSIZE],
+    state_matrix: [KeyState<CSIZE, SCAN_PERIOD_US, DEBOUNCE_US, IDLE_MS>; MSIZE],
 }
 
 impl<
@@ -125,7 +125,7 @@ impl<
         C: OutputPin<Error = E>,
         E: core::convert::From<<C as OutputPin>::Error>,
     {
-        let state_matrix = [KeyState::<SCAN_PERIOD_US, DEBOUNCE_US, IDLE_MS>::new(); MSIZE];
+        let state_matrix = [KeyState::<CSIZE, SCAN_PERIOD_US, DEBOUNCE_US, IDLE_MS>::new(); MSIZE];
         let mut res = Self {
             cols,
             rows,

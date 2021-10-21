@@ -27,7 +27,7 @@ impl Not for State {
 
 /// The KeyState handles all of the decision making and state changes based on a high or low signal from a GPIO pin
 #[derive(Copy, Clone)]
-pub struct KeyState<const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, const IDLE_MS: u32> {
+pub struct KeyState<const CSIZE: usize, const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, const IDLE_MS: u32> {
     /// Most recently GPIO reading (not debounced)
     raw_state: State,
 
@@ -57,8 +57,8 @@ pub struct KeyState<const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, const IDL
     cycles_since_last_bounce: u32,
 }
 
-impl<const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, const IDLE_MS: u32>
-    KeyState<SCAN_PERIOD_US, DEBOUNCE_US, IDLE_MS>
+impl<const CSIZE: usize, const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, const IDLE_MS: u32>
+    KeyState<CSIZE, SCAN_PERIOD_US, DEBOUNCE_US, IDLE_MS>
 {
     pub fn new() -> Self {
         Self {
@@ -109,7 +109,7 @@ impl<const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, const IDLE_MS: u32>
 
         // Update the debounced state if it has changed and exceeded the debounce timer
         // (debounce timer resets if there is any bouncing during the debounce interval).
-        if self.cycles_since_last_bounce * SCAN_PERIOD_US >= DEBOUNCE_US
+        if self.cycles_since_last_bounce * SCAN_PERIOD_US * CSIZE as u32 >= DEBOUNCE_US
             && self.raw_state != self.state
             && self.raw_state_average != 0
         {
@@ -145,7 +145,7 @@ impl<const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, const IDLE_MS: u32>
         // Determine if key is idle
         // Must be both in the off state and have been off >= IDLE_MS
         self.idle = self.state == State::Off
-            && self.cycles_since_state_change * SCAN_PERIOD_US / 1000 >= IDLE_MS;
+            && self.cycles_since_state_change * SCAN_PERIOD_US * CSIZE as u32 / 1000 >= IDLE_MS;
 
         // Return current state
         self.state()
@@ -159,8 +159,8 @@ impl<const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, const IDLE_MS: u32>
     }
 }
 
-impl<const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, const IDLE_MS: u32> Default
-    for KeyState<SCAN_PERIOD_US, DEBOUNCE_US, IDLE_MS>
+impl<const CSIZE: usize, const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, const IDLE_MS: u32> Default
+    for KeyState<CSIZE, SCAN_PERIOD_US, DEBOUNCE_US, IDLE_MS>
 {
     fn default() -> Self {
         Self::new()
