@@ -114,34 +114,36 @@ impl<const CSIZE: usize, const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, cons
 
         // Update the debounced state if it has changed and exceeded the debounce timer
         // (debounce timer resets if there is any bouncing during the debounce interval).
-        if self.cycles_since_last_bounce * SCAN_PERIOD_US * CSIZE as u32 >= DEBOUNCE_US
-            && self.raw_state != self.state
-            && self.raw_state_average != 0
-        {
-            // Update state
-            // If the average is greater than 0, change the state
-            let new_state = if self.raw_state_average > 0 {
-                !self.state
-            } else {
-                self.state
-            };
+        if self.cycles_since_last_bounce * SCAN_PERIOD_US * CSIZE as u32 >= DEBOUNCE_US {
+            // Since we have hit the cycles_since_last_bounce threshold, we can keep it here
+            self.cycles_since_last_bounce -= 1;
 
-            // No longer idle
-            self.idle = false;
+            if self.raw_state != self.state && self.raw_state_average != 0 {
+                // Update state
+                // If the average is greater than 0, change the state
+                let new_state = if self.raw_state_average > 0 {
+                    !self.state
+                } else {
+                    self.state
+                };
 
-            // Stop debounce tracking
-            self.debounce_tracking = false;
-            self.raw_state_average = 0;
+                // No longer idle
+                self.idle = false;
 
-            // Reset state transition cycle counter
-            // and update state if it has changed.
-            if new_state != self.state {
-                self.state = new_state;
-                self.cycles_since_state_change = 0;
+                // Stop debounce tracking
+                self.debounce_tracking = false;
+                self.raw_state_average = 0;
+
+                // Reset state transition cycle counter
+                // and update state if it has changed.
+                if new_state != self.state {
+                    self.state = new_state;
+                    self.cycles_since_state_change = 0;
+                }
+
+                // Return current state
+                return self.state();
             }
-
-            // Return current state
-            return self.state();
         }
 
         // Increment state cycle counter
