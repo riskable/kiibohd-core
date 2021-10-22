@@ -7,7 +7,7 @@ description   = """
 HID-IO protocol implementation for the C kiibohd firmware.
 """
 
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 heapless        = { version = "^0.7" }

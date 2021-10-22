@@ -3,7 +3,7 @@ name = "kll-core"
 version = "0.1.0"
 authors = ["Jacob Alexander <haata@kiibohd.com>"]
 license = "MIT OR Apache-2.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 byteorder         = { version = "1.3", default-features = false }

@@ -8,7 +8,7 @@ FFI HID-IO protocol implementation for the C kiibohd firmware.
 Device Cortex-M implementation
 """
 
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 c_utf8          = { version = "^0.1", default-features = false }

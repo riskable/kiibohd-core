@@ -3,7 +3,7 @@ name          = "kiibohd-core"
 version       = "0.1.0"
 authors       = ["Jacob Alexander <haata@kiibohd.com>", "Zion Koyl <hiszd1@gmail.com>"]
 license       = "MIT OR Apache-2.0"
-edition       = "2018"
+edition       = "2021"
 
 
 [lib]
@@ -32,7 +32,6 @@ members = [
   "kiibohd-hid-io",
   "kiibohd-hid-io-ffi",
   "kiibohd-keyscanning",
-  "kiibohd-log",
   "kiibohd-usb",
   "kll-core",
   "kll-hid",
@@ -47,6 +46,5 @@ heapless            = { version = "^0.7" }
 kiibohd-hid-io-ffi  = { path = "kiibohd-hid-io-ffi", optional = true }
 kiibohd-hall-effect = { path = "kiibohd-hall-effect", optional = true }
 kiibohd-keyscanning = { path = "kiibohd-keyscanning", optional = true }
-kiibohd-log         = { path = "kiibohd-log", optional = true }
 kiibohd-usb         = { path = "kiibohd-usb", optional = true }
 pkg-version         = { version = "^1.0" }

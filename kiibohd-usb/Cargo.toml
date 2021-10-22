@@ -2,7 +2,7 @@
 name = "kiibohd-usb"
 version = "0.1.0"
 authors = ["Jacob Alexander <haata@kiibohd.com>"]
-edition = "2018"
+edition = "2021"
 description = "Kiibohd USB HID Interface"
 keywords = ["usb", "hid", "embedded", "nkro"]
 categories = ["embedded", "hardware-support", "no-std"]
