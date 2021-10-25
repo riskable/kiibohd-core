@@ -1,5 +1,7 @@
 # kiibohd-core
 
+[![Rust](https://github.com/kiibohd/kiibohd-core/actions/workflows/rust.yml/badge.svg)](https://github.com/kiibohd/kiibohd-core/actions/workflows/rust.yml)
+
 kiibohd-core is a re-implementation of the kiibohd firmware as a collection of rust modules.
 Initially kiibohd-core is meant to be used as an FFI interface to extend the C-based kiibohd firmware (https://github.com/kiibohd/controller).
 Eventually the firmware will be converted entirely to rust (though this may take a while).
