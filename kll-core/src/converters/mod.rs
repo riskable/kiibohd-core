@@ -5,12 +5,14 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+mod animation;
 mod layer;
+mod led;
 mod rotation;
 mod switch;
 
 mod convert {
-    use crate::converters::{layer, rotation, switch};
+    use crate::converters::{animation, layer, led, rotation, switch};
     use crate::{CapabilityEvent, CapabilityRun, TriggerEvent};
 
     impl From<TriggerEvent> for CapabilityRun {
@@ -18,20 +20,20 @@ mod convert {
             match event {
                 TriggerEvent::Switch { .. } => switch::convert(event),
                 TriggerEvent::Layer { .. } => layer::convert(event),
-                // TriggerEvent::HidLed(state, index, _) =>,
-                // TriggerEvent::AnalogDistance=>,
-                // TriggerEvent::AnalogVelocity=>,
-                // TriggerEvent::AnalogAcceleration=>,
-                // TriggerEvent::AnalogJerk=>,
-                // TriggerEvent::Animation=>,
-                // TriggerEvent::Sleep =>,
-                // TriggerEvent::Resume=>,
-                // TriggerEvent::Inactive=>,
-                // TriggerEvent::Active=>,
+                TriggerEvent::HidLed { .. } => led::convert(event),
+                TriggerEvent::Animation { .. } => animation::convert(event),
                 TriggerEvent::Rotation { .. } => rotation::convert(event),
                 TriggerEvent::None => CapabilityRun::NoOp {
                     state: CapabilityEvent::None,
                 },
+                // TriggerEvent::AnalogDistance=>,
+                // TriggerEvent::AnalogVelocity=>,
+                // TriggerEvent::AnalogAcceleration=>,
+                // TriggerEvent::AnalogJerk=>,
+                // TriggerEvent::Sleep =>,
+                // TriggerEvent::Resume=>,
+                // TriggerEvent::Inactive=>,
+                // TriggerEvent::Active=>,
                 other => {
                     panic!("*** remove once all events are handled ***\n TriggerEvent {:?} not recognised", other)
                 }

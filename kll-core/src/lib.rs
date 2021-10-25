@@ -513,6 +513,14 @@ pub enum CapabilityRun {
     /// 4 bytes
     McuFlashMode { state: CapabilityEvent } = 10,
 
+    /// USB HID Led event
+    /// Handles press/released based on incoming state
+    /// 5 bytes
+    HidLed {
+        state: CapabilityEvent,
+        id: kll_hid::LedIndicator,
+    } = 11,
+
     /// Overall animation control
     /// 5 bytes
     PixelAnimationControl {

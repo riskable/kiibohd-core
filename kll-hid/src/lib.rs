@@ -299,6 +299,22 @@ impl From<Keyboard> for u16 {
     }
 }
 
+/// Conversion from u8 indexes to LedIndicator enum
+/// # Safety
+impl From<u8> for LedIndicator {
+    fn from(index: u8) -> LedIndicator {
+        unsafe { core::mem::transmute(index as u8) }
+    }
+}
+
+/// Conversion from LedIndicator enum to u8
+/// # Safety
+impl From<LedIndicator> for u8 {
+    fn from(index: LedIndicator) -> u8 {
+        unsafe { core::mem::transmute(index as u8) }
+    }
+}
+
 /// HID LED Indicators
 /// List of LED codes - USB HID 1.12v2 pg 61
 #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]

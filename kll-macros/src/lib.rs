@@ -55,7 +55,7 @@ use std::iter::FromIterator;
 pub fn trigger_guide(input: TokenStream) -> TokenStream {
     let mut output: Vec<String> = vec!["unsafe { &[".to_string()];
 
-    for sequence in input.clone() {
+    for sequence in input {
         match sequence {
             TokenTree::Group(sequence) => {
                 for combo in sequence.stream() {
@@ -199,7 +199,7 @@ pub fn trigger_guide(input: TokenStream) -> TokenStream {
 pub fn result_guide(input: TokenStream) -> TokenStream {
     let mut output: Vec<String> = vec!["unsafe { &[".to_string()];
 
-    for sequence in input.clone() {
+    for sequence in input {
         match sequence {
             TokenTree::Group(sequence) => {
                 for combo in sequence.stream() {
@@ -234,6 +234,7 @@ pub fn result_guide(input: TokenStream) -> TokenStream {
                                             }
                                             "HidKeyboard"
                                             | "HidProtocol"
+                                            | "HidLed"
                                             | "HidSystemControl"
                                             | "LayerRotate"
                                             | "PixelAnimationControl"
