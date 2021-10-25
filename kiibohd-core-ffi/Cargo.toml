@@ -1,0 +1,35 @@
+[package]
+name          = "kiibohd-core"
+version       = "0.1.0"
+authors       = ["Jacob Alexander <haata@kiibohd.com>", "Zion Koyl <hiszd1@gmail.com>"]
+license       = "MIT OR Apache-2.0"
+edition       = "2021"
+
+
+[lib]
+name = "kiibohd_core"
+
+
+[features]
+default = [
+  "kiibohd-hall-effect",
+  "kiibohd-hid-io-ffi",
+  "kiibohd-keyscanning",
+]
+
+# The std option is used for cargo test only
+std = []
+
+# Used when compiling as a static library
+lib = []
+capi = []
+
+
+[dependencies]
+c_utf8              = { version = "^0.1", default-features = false }
+heapless            = { version = "^0.7" }
+kiibohd-hid-io-ffi  = { path = "../kiibohd-hid-io-ffi", optional = true }
+kiibohd-hall-effect = { path = "../kiibohd-hall-effect", optional = true }
+kiibohd-keyscanning = { path = "../kiibohd-keyscanning", optional = true }
+kiibohd-usb         = { path = "../kiibohd-usb", optional = true }
+pkg-version         = { version = "^1.0" }
