@@ -8,6 +8,7 @@ It has been re-thought from the ground up as a set of input device crate modules
 It is even possible to integrate pieces into other languages using the -ffi crates (generally look at [kiibohd-core-ffi](kiibohd-core-ffi)).
 
 **NOTE**: Do not import the -ffi crates if working with rust. They are intended for use with C firmwares.
+
 **NOTE**: Crates in this repo generally use nightly due to requirements of hid-io-protocol
 
 
