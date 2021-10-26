@@ -17,6 +17,11 @@ jobs:
         with:
           command: check
           args: --all
+      # Temporary action until bincode-core is converted to bincode
+      - uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: --manifest-path kll-compiler/Cargo.toml
 
   build:
     name: Build
@@ -31,6 +36,11 @@ jobs:
         with:
           command: build
           args: --all
+      # Temporary action until bincode-core is converted to bincode
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --manifest-path kll-compiler/Cargo.toml
 
   test:
     name: Test
@@ -45,6 +55,11 @@ jobs:
         with:
           command: test
           args: --all
+      # Temporary action until bincode-core is converted to bincode
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --manifest-path kll-compiler/Cargo.toml
 
   fmt:
     name: Rustfmt
@@ -60,6 +75,11 @@ jobs:
         with:
           command: fmt
           args: --all -- --check
+      # Temporary action until bincode-core is converted to bincode
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --manifest-path kll-compiler/Cargo.toml -- --check
 
   clippy:
     name: Clippy
@@ -75,6 +95,11 @@ jobs:
         with:
           command: clippy
           args: --all -- -D warnings
+      # Temporary action until bincode-core is converted to bincode
+      - uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --manifest-path kll-compiler/Cargo.toml -- -D warnings
 
   doc:
     name: Doc Check
@@ -91,3 +116,10 @@ jobs:
         with:
           command: doc
           args: --all
+      # Temporary action until bincode-core is converted to bincode
+      - uses: actions-rs/cargo@v1
+        env:
+          RUSTDOCFLAGS: -Dwarnings
+        with:
+          command: doc
+          args: --manifest-path kll-compiler/Cargo.toml

@@ -9,8 +9,11 @@ members = [
   "kll-hid",
   "kll-macros",
 ]
+# kll-compiler needs to be excluded due to it's serde usage
+# (will be moved back once hid-io-protocol moves from bincode-core to bincode)
 # -ffi crates need to be compiled for a target which seems to cause issues for cargo feature unification
 exclude = [
+  "kll-compiler",
   "kiibohd-core-ffi",
   "kiibohd-hid-io-ffi",
 ]
