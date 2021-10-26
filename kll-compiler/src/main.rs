@@ -1,4 +1,4 @@
-use kll::{Filestore, KllDatastore, KllGroups};
+use kll_compiler::{Filestore, KllDatastore, KllGroups};
 //use layouts::Layouts;
 use std::env;
 use std::path::PathBuf;
@@ -15,6 +15,7 @@ pub enum EmitterType {
     None,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, StructOpt)]
 struct CliOpts {
     /// Activate debug mode
@@ -50,6 +51,7 @@ struct CliOpts {
     kiibohd: KiibohdOpts,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, StructOpt)]
 struct KiibohdOpts {
     /// Specify KLL define .h file output.
@@ -104,6 +106,7 @@ fn main() {
     }
 
     let emitter = EmitterType::from_str(&args.emitter).unwrap();
+    #[allow(clippy::single_match)] // TODO: Remove after adding more emitters
     match emitter {
         EmitterType::Kiibohd => {
             //let mut layouts = Layouts::from_dir(PathBuf::from("layouts"));
@@ -122,7 +125,7 @@ fn main() {
             }
 
             let outfile = env::current_dir().unwrap().join("generatedKeymap.h");
-            kll::emitters::kiibohd::write(&outfile, &groups);
+            kll_compiler::emitters::kiibohd::write(&outfile, &groups);
             println!("Wrote {:?}", outfile);
         }
         _ => {}

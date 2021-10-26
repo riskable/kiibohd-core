@@ -73,7 +73,7 @@ impl<'a> TriggerMacro<'a> {
 pub struct TriggerLayer<'a>(&'a str, &'a [usize]);
 impl<'a> TriggerLayer<'a> {
     fn define_str(&self, i: usize) -> String {
-        if self.1.len() == 0 {
+        if self.1.is_empty() {
             format!("Define_TL( {:2}, {:#04X} ) = {{ 0 }};", self.0, i)
         } else {
             format!(

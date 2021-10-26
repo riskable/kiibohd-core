@@ -15,7 +15,7 @@ use parser::PestError;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::ops::Range;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 pub use types::{
     Action, Animation, AnimationResult, Capability, Key, KllFile, Mapping, PixelDef, Position,
     ResultList, ResultType, Statement, Trigger, TriggerList, TriggerMode, TriggerType,
@@ -121,8 +121,7 @@ impl<'a> KllState<'a> {
             .iter()
             .map(|Mapping(trigger_groups, _, _)| trigger_groups);
         let combos = groups.into_iter().map(|tl| tl.iter());
-        let triggers = combos.into_iter().flatten();
-        triggers
+        combos.into_iter().flatten()
     }
 
     pub fn actions(&self) -> impl Iterator<Item = &Action> + '_ {
@@ -131,8 +130,7 @@ impl<'a> KllState<'a> {
             .iter()
             .map(|Mapping(_, _, result_groups)| result_groups);
         let combos = groups.into_iter().map(|rl| rl.iter());
-        let actions = combos.into_iter().flatten();
-        actions
+        combos.into_iter().flatten()
     }
 
     pub fn scancode_map(&self) -> HashMap<&str, usize> {
@@ -278,10 +276,10 @@ impl<'a> KllDatastore<'a> {
     pub fn new(state: &'a KllState<'a>) -> KllDatastore<'a> {
         KllDatastore {
             unicode_strings: state.unicode_strings(),
-            scancode_range: KllDatastore::get_scancode_range(&state),
-            unique_triggers: state.triggers().map(|x| x.clone()).collect(),
-            unique_results: state.actions().map(|x| x.clone()).collect(),
-            unique_animations: state.animations().map(|x| x.clone()).collect(),
+            scancode_range: KllDatastore::get_scancode_range(state),
+            unique_triggers: state.triggers().cloned().collect(),
+            unique_results: state.actions().cloned().collect(),
+            unique_animations: state.animations().cloned().collect(),
         }
     }
 }
@@ -302,15 +300,21 @@ impl Filestore {
             files: HashMap::new(),
         }
     }
-    pub fn load_file(&mut self, path: &PathBuf) {
+    pub fn load_file(&mut self, path: &Path) {
         //dbg!(&path);
         let raw_text = fs::read_to_string(path).expect("cannot read file");
-        self.files.insert(path.clone(), raw_text);
+        self.files.insert(path.to_path_buf(), raw_text);
     }
 
-    pub fn get_file<'a>(&'a self, path: &PathBuf) -> KllState<'a> {
+    pub fn get_file<'a>(&'a self, path: &Path) -> KllState<'a> {
         let raw_text = self.files.get(path).unwrap();
-        parse(&raw_text).unwrap().into_struct()
+        parse(raw_text).unwrap().into_struct()
+    }
+}
+
+impl Default for Filestore {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -342,7 +346,7 @@ impl<'a> KllGroups<'a> {
         let mut configs = self.config.iter();
         let mut config = configs.next().unwrap().clone();
         for c in configs {
-            config.merge(&c);
+            config.merge(c);
         }
         config
     }
@@ -351,7 +355,7 @@ impl<'a> KllGroups<'a> {
         let mut layouts = self.base.iter();
         let mut layout = layouts.next().unwrap().clone();
         for base in layouts {
-            layout.merge(&base);
+            layout.merge(base);
         }
         layout
     }
@@ -366,7 +370,7 @@ impl<'a> KllGroups<'a> {
         let mut partials: Vec<KllState> = vec![];
         for partial in &self.partials {
             let mut layout = self.basemap();
-            layout.merge(&partial);
+            layout.merge(partial);
             partials.push(layout);
         }
 

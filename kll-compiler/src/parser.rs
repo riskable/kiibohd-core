@@ -1,6 +1,7 @@
 use pest_consume::{match_nodes, Error, Parser};
 use std::collections::HashMap;
 use std::ops::Range;
+use std::str::FromStr;
 
 use crate::types::*;
 
@@ -17,7 +18,7 @@ pub fn parse_int(s: &str) -> usize {
     if s.starts_with("0x") {
         usize::from_str_radix(s.trim_start_matches("0x"), 16).unwrap_or(0)
     } else {
-        usize::from_str_radix(s, 10).unwrap_or(0)
+        s.parse::<usize>().unwrap_or(0)
     }
 }
 
@@ -33,7 +34,7 @@ impl KLLParser {
         Ok(input.as_str().trim_matches('"'))
     }
     fn unistr(input: Node) -> Result<&str> {
-        Ok(input.as_str().strip_prefix("u").unwrap().trim_matches('"'))
+        Ok(input.as_str().strip_prefix('u').unwrap().trim_matches('"'))
     }
     fn number(input: Node) -> Result<usize> {
         Ok(parse_int(input.as_str()))
@@ -42,7 +43,7 @@ impl KLLParser {
         Ok(match_nodes!(input.into_children();
             [number(start)] => (start, start),
             [number(start), number(end)] => (start, end),
-            [string(name)] => (0, 0), // XXX (What table are we using?)
+            [string(_name)] => (0, 0), // XXX (What table are we using?)
         ))
     }
     fn ids(input: Node) -> Result<Indices> {
@@ -87,7 +88,7 @@ impl KLLParser {
             },
             [name(n), kvmap(args)] => Capability {
                 function: n,
-                args: args.keys().map(|x| *x).collect(), // xxx
+                args: args.keys().copied().collect(), // xxx
             }
         ))
     }
@@ -155,7 +156,7 @@ impl KLLParser {
             },
             [kvmap(map), channel(c)..] => {
                 Pixel {
-                    range: PixelRange::from_map(map),
+                    range: PixelRange::from_map(map).unwrap(), // XXX Handle error
                     channel_values: c.collect(),
                 }
             }
@@ -163,7 +164,7 @@ impl KLLParser {
     }
 
     fn scancode(input: Node) -> Result<usize> {
-        Ok(parse_int(input.as_str().strip_prefix("S").unwrap()))
+        Ok(parse_int(input.as_str().strip_prefix('S').unwrap()))
     }
     fn charcode(input: Node) -> Result<Key> {
         let charcode = input.as_str().trim_matches('"');
@@ -174,7 +175,7 @@ impl KLLParser {
         Ok(Key::Char(unicode))
     }
     fn usbcode(input: Node) -> Result<Key> {
-        let usbcode = input.as_str().strip_prefix("U").unwrap();
+        let usbcode = input.as_str().strip_prefix('U').unwrap();
         Ok(Key::Usb(usbcode.trim_matches('"')))
     }
     fn consumer(input: Node) -> Result<Key> {
@@ -201,7 +202,7 @@ impl KLLParser {
     }
 
     fn layer_type(input: Node) -> Result<LayerMode> {
-        Ok(LayerMode::from_str(input.as_str()))
+        Ok(LayerMode::from_str(input.as_str()).unwrap()) // XXX Handle error
     }
 
     fn layer(input: Node) -> Result<(LayerMode, Indices)> {
@@ -215,7 +216,7 @@ impl KLLParser {
         Ok(match_nodes!(input.into_children();
             [ids(indices)] => indices,
             [number(index)] => vec![ Range { start: index, end: index } ],
-            [string(name)] => vec![ Range { start: 0, end: 0 } ], // XXX (Need LUT)
+            [string(_name)] => vec![ Range { start: 0, end: 0 } ], // XXX (Need LUT)
         ))
     }
 
@@ -242,7 +243,7 @@ impl KLLParser {
             },
             [trigger_type(trigger), kvmap(args)] => Trigger {
                 trigger,
-                state: Some(StateMap::from_map(args)),
+                state: Some(StateMap::from_map(args).unwrap()), // XXX Handle error
             },
         ))
     }
@@ -271,7 +272,7 @@ impl KLLParser {
             },
             [result_type(result), kvmap(args)] => Action {
                 result,
-                state: Some(StateMap::from_map(args)),
+                state: Some(StateMap::from_map(args).unwrap()), // XXX Handle error
             },
         ))
     }
@@ -338,7 +339,7 @@ impl KLLParser {
                 let pixel = PixelDef::new(channelmap, Some(scancode));
                 Statement::Pixelmap((vec![ Range { start, end } ], pixel))
             },
-            [pixel(indices), kvmap(channelmap), none] => {
+            [pixel(indices), kvmap(channelmap), _none] => {
                 let pixel = PixelDef::new(channelmap, None);
                 Statement::Pixelmap((indices, pixel))
             },
@@ -365,7 +366,7 @@ impl KLLParser {
             [name(name), kvmap(args)] => {
                 AnimationResult {
                     name,
-                    args: args.keys().map(|x| *x).collect(), // xxx
+                    args: args.keys().copied().collect(), // xxx
                 }
             }
         ))
@@ -404,6 +405,7 @@ impl KLLParser {
 }
 
 impl<'a> KllFile<'a> {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(text: &str) -> Result<KllFile> {
         let inputs = KLLParser::parse(Rule::file, text)?;
         let input = inputs.single()?;

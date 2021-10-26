@@ -1,12 +1,19 @@
-use layouts::Layout;
+use layouts_rs::Layout;
 use std::collections::HashMap;
 use std::fmt;
 use std::ops::Range;
+use std::str::FromStr;
 
-pub type Indices = Vec<Range<usize>>;
+pub type Index = Range<usize>;
+pub type Indices = Vec<Index>;
 pub type Map<'a> = HashMap<&'a str, &'a str>;
 
-pub fn format_indices(ranges: &Indices) -> String {
+#[derive(Debug, Clone)]
+pub enum Error {
+    UnknownMatch { s: String },
+}
+
+pub fn format_indices(ranges: &[Index]) -> String {
     ranges
         .iter()
         .map(|range| format!("{}-{}", range.start, range.end))
@@ -264,15 +271,19 @@ pub enum LayerMode {
     Lock,
 }
 
-impl LayerMode {
-    pub fn from_str(s: &str) -> Self {
-        match s {
+impl FromStr for LayerMode {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
             "Layer" => Self::Normal,
             "LayerShift" => Self::Shift,
             "LayerLatch" => Self::Latch,
             "LayerLock" => Self::Lock,
-            _ => unreachable!(),
-        }
+            _ => {
+                return Err(Error::UnknownMatch { s: s.to_string() });
+            }
+        })
     }
 }
 
@@ -358,11 +369,11 @@ pub struct StateMap {
 }
 
 impl StateMap {
-    pub fn from_map(map: Map) -> Self {
+    pub fn from_map(map: Map) -> Result<Self, Error> {
         let mut states = vec![];
         for (k, v) in map.iter() {
             let mut state = State {
-                kind: StateType::from_str(k),
+                kind: StateType::from_str(k)?,
                 time: None,
             };
             if let Ok(v) = v.parse::<usize>() {
@@ -371,7 +382,7 @@ impl StateMap {
             states.push(state);
         }
 
-        StateMap { states }
+        Ok(StateMap { states })
     }
 }
 
@@ -407,9 +418,11 @@ pub enum StateType {
     Off,        // (Off)
 }
 
-impl StateType {
-    pub fn from_str(s: &str) -> Self {
-        match s {
+impl FromStr for StateType {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
             // Key
             "P" => Self::Press,
             "H" => Self::Hold,
@@ -423,8 +436,10 @@ impl StateType {
             "On" => Self::On,
             "D" => Self::Deactivate,
             "Off" => Self::Off,
-            _ => unreachable!(),
-        }
+            _ => {
+                return Err(Error::UnknownMatch { s: s.to_string() });
+            }
+        })
     }
 }
 
@@ -552,9 +567,11 @@ pub enum TriggerMode {
     IsolateRemove,      // i:-
 }
 
-impl TriggerMode {
-    pub fn from_str(s: &str) -> Self {
-        match s {
+impl FromStr for TriggerMode {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
             ":" => Self::Replace,
             "::" => Self::SoftReplace,
             ":+" => Self::Add,
@@ -563,8 +580,10 @@ impl TriggerMode {
             "i::" => Self::IsolateSoftReplace,
             "i:+" => Self::IsolateAdd,
             "i:-" => Self::IsolateRemove,
-            _ => unreachable!(),
-        }
+            _ => {
+                return Err(Error::UnknownMatch { s: s.to_string() });
+            }
+        })
     }
 }
 
@@ -590,9 +609,11 @@ pub enum PixelAddr {
     RelativePercent(usize),
 }
 
-impl PixelAddr {
-    pub fn from_str(s: &str) -> PixelAddr {
-        PixelAddr::Absolute(s.parse::<usize>().unwrap_or(0)) // XXX
+impl FromStr for PixelAddr {
+    type Err = <usize as FromStr>::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(PixelAddr::Absolute(s.parse::<usize>()?))
     }
 }
 
@@ -615,18 +636,18 @@ pub struct PixelRange<'a> {
 }
 
 impl<'a> PixelRange<'a> {
-    pub fn from_map(map: Map) -> Self {
+    pub fn from_map(map: Map) -> Result<Self, <usize as FromStr>::Err> {
         let mut pos = PixelRange::default();
         for (k, v) in map.iter() {
             match *k {
-                "i" => pos.index = Some(PixelAddr::from_str(v)),
-                "r" => pos.row = Some(PixelAddr::from_str(v)),
-                "c" => pos.col = Some(PixelAddr::from_str(v)),
+                "i" => pos.index = Some(PixelAddr::from_str(v)?),
+                "r" => pos.row = Some(PixelAddr::from_str(v)?),
+                "c" => pos.col = Some(PixelAddr::from_str(v)?),
                 _ => {}
             }
         }
 
-        pos
+        Ok(pos)
     }
 }
 

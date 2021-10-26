@@ -1,16 +1,18 @@
 [package]
 name = "kll-compiler"
 version = "0.1.0"
-authors = ["Smasher816 <Smasher816@gmail.com>"]
-edition = "2018"
+authors = ["Smasher816 <Smasher816@gmail.com>", "Jacob Alexander <haata@kiibohd.com>"]
+license = "MIT OR Apache-2.0"
+edition = "2021"
+description = "KLL (Keyboard Layout Language) Compiler - Rust Edition"
 
 [dependencies]
-pest = { version = "2.1", features = ["pretty-print" ] }
-pest_derive = "2.1"
-pest_consume = "1.0"
-object-merge = "0.1.0-alpha1"
+alphanumeric-sort = "1.4"
 derive-object-merge = "0.1.0-alpha1"
+enum-utils = "0.1"
+layouts-rs = "0.1.0"
+object-merge = "0.1.0-alpha1"
+pest = { version = "2.1", features = ["pretty-print" ] }
+pest_consume = "1.1"
+pest_derive = "2.1"
 structopt = "0.3"
-enum-utils = "0.1.2"
-alphanumeric-sort = "1.4.1"
-layouts = { path = "../layouts-rs" }
