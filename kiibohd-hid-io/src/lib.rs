@@ -8,7 +8,6 @@
 // ----- Modules -----
 
 #![no_std]
-
 // TODO(haata): Remove this once clippy bug is fixed (likely mid-Nov 2021)
 #![allow(clippy::question_mark)]
 
