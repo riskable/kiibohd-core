@@ -6,6 +6,6 @@ license = "MIT OR Apache-2.0"
 edition = "2021"
 
 [dependencies]
-defmt = "0.2"
+defmt = "0.3"
 
 [dev-dependencies]

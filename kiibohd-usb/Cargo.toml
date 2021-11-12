@@ -10,7 +10,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/kiibohd/kiibohd-core"
 
 [dependencies]
-defmt = "0.2"
+defmt = "0.3"
 heapless = { version = "0.7", features = ["defmt-impl"] }
 kiibohd-hid-io = { path = "../kiibohd-hid-io", optional = true }
 usb-device = { git = "https://github.com/haata/usb-device.git", features = ["defmt-impl"] }
