@@ -1,5 +1,6 @@
 [workspace]
 members = [
+  "is31fl3743b",
   "kiibohd-hall-effect",
   "kiibohd-hall-effect-keyscanning",
   "kiibohd-hid-io",

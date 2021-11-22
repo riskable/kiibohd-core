@@ -8,7 +8,6 @@
 #![no_std]
 #![feature(arbitrary_enum_discriminant)]
 #![feature(const_ptr_read)]
-#![feature(const_raw_ptr_deref)]
 #![feature(const_slice_from_raw_parts)]
 
 #[macro_use]
