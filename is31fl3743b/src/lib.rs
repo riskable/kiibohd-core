@@ -116,7 +116,9 @@ macro_rules! atsam4_reg_sync {
 
 /// atsam4 specific implementation of Is31fl3743b (variable cs mode)
 ///
-/// ```
+/// ```ignore
+/// use is31fl3743b::Is31fl3743bAtsam4Dma;
+///
 /// const ISSI_DRIVER_CHIPS: usize = 2;
 /// const ISSI_DRIVER_QUEUE_SIZE: usize = 5;
 /// const ISSI_DRIVER_CS_LAYOUT: [u8; ISSI_DRIVER_CHIPS] = [0, 1];
