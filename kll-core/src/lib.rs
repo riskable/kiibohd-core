@@ -992,7 +992,6 @@ pub enum CapabilityEvent {
     Passthrough(TriggerEvent) = 4,
 }
 
-/*
 /// Position
 /// Each position has 6 dimensions
 /// Units are in mm
@@ -1010,4 +1009,3 @@ pub struct Position {
     /// Rotation z direction
     rz: f32,
 }
-*/
