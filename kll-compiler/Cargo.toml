@@ -10,6 +10,7 @@ description = "KLL (Keyboard Layout Language) Compiler - Rust Edition"
 alphanumeric-sort = "1.4"
 derive-object-merge = "0.1.0-alpha1"
 enum-utils = "0.1"
+kll-core = { path = "../kll-core" }
 layouts-rs = "0.1.0"
 object-merge = "0.1.0-alpha1"
 pest = { version = "2.1", features = ["pretty-print"] }

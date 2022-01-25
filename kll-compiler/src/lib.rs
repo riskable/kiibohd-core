@@ -1,4 +1,5 @@
 #![feature(if_let_guard)]
+#![feature(map_try_insert)]
 #![allow(incomplete_features)]
 
 pub mod emitters;
@@ -124,6 +125,12 @@ impl<'a> KllState<'a> {
         combos.into_iter().flatten()
     }
 
+    pub fn trigger_lists(&self) -> impl Iterator<Item = &TriggerList> + '_ {
+        self.keymap
+            .iter()
+            .map(|Mapping(trigger_groups, _, _)| trigger_groups)
+    }
+
     pub fn actions(&self) -> impl Iterator<Item = &Action> + '_ {
         let groups = self
             .keymap
@@ -131,6 +138,18 @@ impl<'a> KllState<'a> {
             .map(|Mapping(_, _, result_groups)| result_groups);
         let combos = groups.into_iter().map(|rl| rl.iter());
         combos.into_iter().flatten()
+    }
+
+    pub fn result_lists(&self) -> impl Iterator<Item = &ResultList> + '_ {
+        self.keymap
+            .iter()
+            .map(|Mapping(_, _, result_groups)| result_groups)
+    }
+
+    pub fn trigger_result_lists(&self) -> impl Iterator<Item = (&TriggerList, &ResultList)> + '_ {
+        self.keymap
+            .iter()
+            .map(|Mapping(trigger_groups, _, result_groups)| (trigger_groups, result_groups))
     }
 
     pub fn scancode_map(&self) -> HashMap<&str, usize> {

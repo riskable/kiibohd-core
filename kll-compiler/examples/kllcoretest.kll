@@ -1,0 +1,11 @@
+Name = kllcoretest;
+Version = 0.1;
+Author = "HaaTa (Jacob Alexander) 2022";
+
+# Modified Date
+Date = 2022-01-20;
+
+
+S0x00(P) : U"Esc"(P);
+S0x00(R) : U"Esc"(R);
+

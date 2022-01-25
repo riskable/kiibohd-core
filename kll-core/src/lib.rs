@@ -16,6 +16,7 @@ extern crate static_assertions;
 mod converters;
 pub mod layout;
 pub mod macros;
+pub use kll_hid;
 
 pub mod hid {
     #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]

@@ -45,6 +45,24 @@ impl<'a> TriggerList<'a> {
     pub fn iter(&self) -> impl Iterator<Item = &Trigger> + '_ {
         self.0.iter().flatten()
     }
+
+    /// Converts the TriggerList into a kll-core trigger guide
+    pub fn kll_core_guide(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        for combo in &self.0 {
+            // Push the length of the combo
+            buf.push(combo.len() as u8);
+            // Push each combo element
+            for elem in combo {
+                unsafe {
+                    buf.extend_from_slice(elem.kll_core_condition().bytes());
+                }
+            }
+        }
+        // Push final 0-length combo to indicate sequence has finished
+        buf.push(0);
+        buf
+    }
 }
 
 impl<'a> fmt::Display for TriggerList<'a> {
@@ -71,6 +89,24 @@ pub struct ResultList<'a>(pub Vec<Vec<Action<'a>>>);
 impl<'a> ResultList<'a> {
     pub fn iter(&self) -> impl Iterator<Item = &Action> + '_ {
         self.0.iter().flatten()
+    }
+
+    /// Converts the ResultList into a kll-core result guide
+    pub fn kll_core_guide(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        for combo in &self.0 {
+            // Push the length of the combo
+            buf.push(combo.len() as u8);
+            // Push each combo element
+            for elem in combo {
+                unsafe {
+                    buf.extend_from_slice(elem.kll_core_condition().bytes());
+                }
+            }
+        }
+        // Push final 0-length combo to indicate sequence has finished
+        buf.push(0);
+        buf
     }
 }
 
@@ -337,6 +373,79 @@ pub struct Trigger<'a> {
     pub state: Option<StateMap>,
 }
 
+impl<'a> Trigger<'a> {
+    /// Converts to a kll-core TriggerCondition
+    ///
+    /// If no scheduling is defined, automatically generate
+    /// state scheduling parameters.
+    /// e.g. For S1 : U"A";
+    ///         S1(P) : U"A"(P);
+    ///         S1(R) : U"A"(R);
+    /// kll-core does not automatically deduce states like the original
+    /// controller firmware did.
+    /// TODO ^ Use a kll-compiler function to automatically duplicate so we don't have to do it
+    /// here.
+    fn kll_core_condition(&self) -> kll_core::TriggerCondition {
+        // State must be defined
+        // generate_state_scheduling() function can be used to compute if
+        // it's not defined.
+        assert!(self.state.is_some(), "state *must* be defined, use generate_state_scheduling() to convert implied state into implicit state.");
+
+        match &self.trigger {
+            TriggerType::Key(key) => {
+                match key {
+                    Key::Scancode(index) => {
+                        kll_core::TriggerCondition::Switch {
+                            state: kll_core::trigger::Phro::Press, // TODO from compiler state
+                            index: *index as u16,
+                            loop_condition_index: 0, // TODO
+                        }
+                    }
+                    // NOTE: Only Scancodes are valid here
+                    //       The compiler should have turned everything
+                    //       into scancodes at this point.
+                    _ => kll_core::TriggerCondition::None,
+                }
+            }
+            TriggerType::Layer((_mode, _indices)) => {
+                panic!("Missing Layer");
+                /*
+                kll_core::TriggerCondition::Layer {
+                    state: kll_core::trigger::LayerState::ShiftActivate, // TODO compute
+                    loop_condition_index: 0,                             // TODO
+                    layer: 0,                                            // TODO
+                }
+                */
+            }
+            TriggerType::Indicator(_indices) => {
+                panic!("Missing indicator");
+                /*
+                kll_core::TriggerCondition::HidLed {
+                    state: kll_core::trigger::Aodo::Activate, // TODO compute
+                    loop_condition_index: 0,                  // TODO
+                    index: 0,                                 // TODO
+                }
+                */
+            }
+            TriggerType::Generic((_bank, _index, _param)) => {
+                panic!("Missing Generic");
+                // TODO
+                //kll_core::TriggerCondition::None
+            }
+            TriggerType::Animation(_name) => {
+                panic!("Missing Animation");
+                /*
+                kll_core::TriggerCondition::Animation {
+                    state: kll_core::trigger::Dro::Done, // TODO compute
+                    index: 0,                            // TODO
+                    loop_condition_index: 0,             // TODO
+                }
+                */
+            }
+        }
+    }
+}
+
 impl<'a> fmt::Display for Trigger<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(state) = &self.state {
@@ -543,6 +652,54 @@ impl<'a> fmt::Display for ResultType<'a> {
 pub struct Action<'a> {
     pub result: ResultType<'a>,
     pub state: Option<StateMap>,
+}
+
+impl<'a> Action<'a> {
+    /// Converts to a kll-core Capability definition
+    fn kll_core_condition(&self) -> kll_core::Capability {
+        // State must be defined
+        // generate_state_scheduling() function can be used to compute if
+        // it's not defined.
+        assert!(self.state.is_some(), "state *must* be defined, use generate_state_scheduling() to convert implied state into implicit state.");
+
+        match &self.result {
+            ResultType::Output(key) => {
+                match key {
+                    Key::Usb(_value) => {
+                        // TODO Lookup usb value
+                        let id = kll_core::kll_hid::Keyboard::A;
+                        kll_core::Capability::HidKeyboard {
+                            state: kll_core::CapabilityState::Initial, // TODO
+                            loop_condition_index: 0,                   // TODO
+                            id,
+                        }
+                    }
+                    _ => kll_core::Capability::NoOp {
+                        state: kll_core::CapabilityState::None,
+                        loop_condition_index: 0,
+                    },
+                }
+            }
+            ResultType::Layer((_mode, _indices)) => {
+                panic!("Incomplete");
+            }
+            ResultType::Animation(_animation_result) => {
+                panic!("Incomplete");
+            }
+            ResultType::Capability((_capability, _state)) => {
+                panic!("Incomplete");
+            }
+            ResultType::Text(_text) => {
+                panic!("Incomplete");
+            }
+            ResultType::UnicodeText(_text) => {
+                panic!("Incomplete");
+            }
+            _ => {
+                panic!("Incomplete");
+            }
+        }
+    }
 }
 
 impl<'a> fmt::Display for Action<'a> {

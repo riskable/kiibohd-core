@@ -13,7 +13,7 @@ name = @{ name_char+ }
 word = @{ char+ }
 value = @{ string | word }
 
-number = @{ "0x" ~ ASCII_HEX_DIGIT+ | NUMBER+ } 
+number = @{ "0x" ~ ASCII_HEX_DIGIT+ | NUMBER+ }
 id = _{ string | number }
 
 id_with_state = _{ id ~ state? }
