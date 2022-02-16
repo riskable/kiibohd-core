@@ -8,7 +8,7 @@ use std::path::Path;
 type TriggerResultHash = HashMap<(Vec<u8>, Vec<u8>), (usize, usize, usize)>;
 
 #[allow(dead_code)]
-struct KiibohdCoreData<'a> {
+pub struct KiibohdCoreData<'a> {
     layers: Vec<KllState<'a>>,
     pub trigger_hash: HashMap<Vec<u8>, usize>,
     pub result_hash: HashMap<Vec<u8>, usize>,

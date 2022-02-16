@@ -395,4 +395,13 @@ impl<'a> KllGroups<'a> {
 
         partials
     }
+    /// Combines default and partialmaps as a list of layers (defaultmap being 0)
+    pub fn layers(&self) -> Vec<KllState<'a>> {
+        let mut layers: Vec<KllState> = vec![self.defaultmap()];
+        for layer in self.partialmaps() {
+            layers.push(layer);
+        }
+
+        layers
+    }
 }
