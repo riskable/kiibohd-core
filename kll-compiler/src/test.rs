@@ -207,3 +207,20 @@ mod examples {
         assert!(result.is_ok());
     }
 }
+
+#[cfg(test)]
+mod processing {
+    use crate::types::{KllFile, Statement};
+
+    #[test]
+    fn scancode_implied_state() {
+        let result = dbg!(KllFile::from_str("S100 : U\"A\";\n"));
+        assert!(result.is_ok());
+        match &result.unwrap().statements[0] {
+            Statement::Keymap(mapping) => {
+                dbg!(mapping.implied_state());
+            }
+            _ => {}
+        }
+    }
+}

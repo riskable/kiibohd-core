@@ -22,6 +22,8 @@ pub use types::{
     ResultList, ResultType, Statement, Trigger, TriggerList, TriggerMode, TriggerType,
 };
 
+pub use layouts_rs::Layouts;
+
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Value<'a> {
     List(Vec<&'a str>),

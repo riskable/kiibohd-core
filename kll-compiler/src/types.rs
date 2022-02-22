@@ -32,6 +32,33 @@ pub fn maybe_quote(text: &str) -> String {
 #[derive(Debug, Clone)]
 pub struct Mapping<'a>(pub TriggerList<'a>, pub TriggerMode, pub ResultList<'a>);
 
+impl<'a> Mapping<'a> {
+    pub fn implied_state(&self) -> Vec<Self> {
+        // TODO Handle other combinations of implied state
+        let triggerlists = self.0.implied_state();
+        let resultlists = self.2.implied_state();
+
+        let mut mappings = Vec::new();
+
+        // TODO Allow for other combinations other than just simple cases
+        if triggerlists.len() == 2 && resultlists.len() == 2 {
+            mappings.push(Self(
+                triggerlists[0].clone(),
+                self.1.clone(),
+                resultlists[0].clone(),
+            ));
+
+            mappings.push(Self(
+                triggerlists[1].clone(),
+                self.1.clone(),
+                resultlists[1].clone(),
+            ));
+        }
+
+        mappings
+    }
+}
+
 impl<'a> fmt::Display for Mapping<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {} {}", self.0, self.1, self.2)
@@ -62,6 +89,26 @@ impl<'a> TriggerList<'a> {
         // Push final 0-length combo to indicate sequence has finished
         buf.push(0);
         buf
+    }
+
+    fn implied_state(&self) -> Vec<Self> {
+        // TODO
+        // Return permutations of implied TriggerList states
+        // TODO
+        // S1 : U"A"; => S1(P) : U"A"(P); S1(R) : U"A"(R);
+        assert!(
+            self.0.len() == 1,
+            "TriggerList must only have 1 sequence element. (may not be implemented yet)"
+        );
+        assert!(
+            self.0[0].len() == 1,
+            "TriggerList must only have 1 combo element. (feature may not be implemented yet)"
+        );
+        let triggers = self.0[0][0].implied_state();
+        vec![
+            Self(vec![vec![triggers[0].clone()]]),
+            Self(vec![vec![triggers[1].clone()]]),
+        ]
     }
 }
 
@@ -107,6 +154,26 @@ impl<'a> ResultList<'a> {
         // Push final 0-length combo to indicate sequence has finished
         buf.push(0);
         buf
+    }
+
+    fn implied_state(&self) -> Vec<Self> {
+        // TODO
+        // Return permutations of implied ResultList states
+        // TODO
+        // S1 : U"A"; => S1(P) : U"A"(P); S1(R) : U"A"(R);
+        assert!(
+            self.0.len() == 1,
+            "ResultList must only have 1 sequence element. (may not be implemented yet)"
+        );
+        assert!(
+            self.0[0].len() == 1,
+            "ResultList must only have 1 combo element. (feature may not be implemented yet)"
+        );
+        let results = self.0[0][0].implied_state();
+        vec![
+            Self(vec![vec![results[0].clone()]]),
+            Self(vec![vec![results[1].clone()]]),
+        ]
     }
 }
 
@@ -444,6 +511,34 @@ impl<'a> Trigger<'a> {
             }
         }
     }
+
+    /// Generates state scheduling from implied state
+    /// Converts S1 : U"A"; to (trigger part)
+    ///    S1(P) : U"A"(P);
+    ///    S1(R) : U"A"(R);
+    fn implied_state(&self) -> Vec<Self> {
+        // No state (implied state), generate new triggers
+        if self.state.is_none() {
+            vec![
+                Self {
+                    trigger: self.trigger.clone(),
+                    state: Some(StateMap::new(vec![State {
+                        kind: StateType::Press,
+                        time: None,
+                    }])),
+                },
+                Self {
+                    trigger: self.trigger.clone(),
+                    state: Some(StateMap::new(vec![State {
+                        kind: StateType::Release,
+                        time: None,
+                    }])),
+                },
+            ]
+        } else {
+            vec![self.clone()]
+        }
+    }
 }
 
 impl<'a> fmt::Display for Trigger<'a> {
@@ -478,6 +573,10 @@ pub struct StateMap {
 }
 
 impl StateMap {
+    pub fn new(states: Vec<State>) -> Self {
+        Self { states }
+    }
+
     pub fn from_map(map: Map) -> Result<Self, Error> {
         let mut states = vec![];
         for (k, v) in map.iter() {
@@ -698,6 +797,34 @@ impl<'a> Action<'a> {
             _ => {
                 panic!("Incomplete");
             }
+        }
+    }
+
+    /// Generates state scheduling from implied state
+    /// Converts S1 : U"A"; to (action/result part)
+    ///    S1(P) : U"A"(P);
+    ///    S1(R) : U"A"(R);
+    fn implied_state(&self) -> Vec<Self> {
+        // No state (implied state), generate new actions
+        if self.state.is_none() {
+            vec![
+                Self {
+                    result: self.result.clone(),
+                    state: Some(StateMap::new(vec![State {
+                        kind: StateType::Press,
+                        time: None,
+                    }])),
+                },
+                Self {
+                    result: self.result.clone(),
+                    state: Some(StateMap::new(vec![State {
+                        kind: StateType::Release,
+                        time: None,
+                    }])),
+                },
+            ]
+        } else {
+            vec![self.clone()]
         }
     }
 }

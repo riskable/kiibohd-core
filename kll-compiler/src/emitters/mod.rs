@@ -1,3 +1,3 @@
 pub mod kiibohd;
-pub mod kiibohdcore;
+pub mod kllcore;
 pub mod rust;

@@ -8,7 +8,7 @@ use std::path::Path;
 type TriggerResultHash = HashMap<(Vec<u8>, Vec<u8>), (usize, usize, usize)>;
 
 #[allow(dead_code)]
-pub struct KiibohdCoreData<'a> {
+pub struct KllCoreData<'a> {
     layers: Vec<KllState<'a>>,
     pub trigger_hash: HashMap<Vec<u8>, usize>,
     pub result_hash: HashMap<Vec<u8>, usize>,
@@ -20,7 +20,7 @@ pub struct KiibohdCoreData<'a> {
     pub layer_lookup: Vec<u8>,
 }
 
-impl<'a> KiibohdCoreData<'a> {
+impl<'a> KllCoreData<'a> {
     /// Given KllState layers, generate datastructures for kll-core
     pub fn new(layers: &[KllState<'a>]) -> Self {
         // Trigger and Result deduplication hashmaps
@@ -169,17 +169,17 @@ impl<'a> KiibohdCoreData<'a> {
 
 /// Trigger Guides
 /// Traces sequences of scancodes
-pub const TRIGGER_GUIDES: &'static [u8] = [{}];
+pub const TRIGGER_GUIDES: &'static [u8] = &[{}];
 
 /// Result Guides
 /// Traces sequences of capabilities
-pub const RESULT_GUIDES: &'static [u8] = [{}];
+pub const RESULT_GUIDES: &'static [u8] = &[{}];
 
 /// Trigger:Result Mapping
-pub const TRIGGER_RESULT_MAPPING: &'static [u8] = [{}];
+pub const TRIGGER_RESULT_MAPPING: &'static [u8] = &[{}];
 
 /// Raw Layer Lookup Table
-pub const LAYER_LOOKUP: &'static [u8] = [{}];
+pub const LAYER_LOOKUP: &'static [u8] = &[{}];
 ",
                 trigger_guides, result_guides, trigger_result_mapping, layer_lookup
             )
@@ -201,7 +201,7 @@ pub const LAYER_LOOKUP: &'static [u8] = [{}];
 
 #[cfg(test)]
 mod test {
-    use crate::emitters::kiibohdcore::KiibohdCoreData;
+    use crate::emitters::kllcore::KllCoreData;
     use crate::types::KllFile;
     use std::collections::HashMap;
     use std::fs;
@@ -297,7 +297,7 @@ mod test {
         let result = KllFile::from_str(&test);
         let state = result.unwrap().into_struct();
         let layers = vec![state];
-        let _kdata = KiibohdCoreData::new(&layers);
+        let _kdata = KllCoreData::new(&layers);
 
         // TODO Validate
         // Load data structures into kll-core
@@ -329,10 +329,11 @@ pub fn verify(_groups: &KllGroups) -> Result<(), Error> {
 
 pub fn write(file: &Path, groups: &KllGroups) {
     // TODO Merge layouts correctly
-    let layers = &groups.default;
+    let layers = &groups.base;
+    //let layers = &groups.default;
 
     // Generate kll-core datastructures
-    let kdata = KiibohdCoreData::new(layers);
+    let kdata = KllCoreData::new(layers);
 
     // Write rust file
     kdata.rust(file).unwrap();

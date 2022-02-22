@@ -12,8 +12,6 @@ pub enum EmitterType {
     Kll,
     /// Old C-style code generation
     Kiibohd,
-    /// Rust code generation for kiibohd-core
-    KiibohdCore,
     /// Configurator data format
     Configurator,
     /// Simple rust code generation (for basic unit tests)
@@ -31,7 +29,7 @@ struct CliOpts {
     debug: bool,
 
     /// Specify target emitter for the KLL compiler. Pass multiple times to use more than one.
-    #[structopt(long, default_value = "kiibohd-core")]
+    #[structopt(long, default_value = "kiibohd")]
     emitter: String,
 
     /// Specify base configuration .kll files, earliest priority
@@ -113,50 +111,25 @@ fn main() {
     }
 
     let emitter = EmitterType::from_str(&args.emitter).unwrap();
-    match emitter {
-        EmitterType::KiibohdCore => {
-            let mut layouts = Layouts::from_dir(PathBuf::from("layouts"));
-            let layout = layouts.get_layout("base/base.json");
-            dbg!(&layout.from_hid_keyboard);
+    // Old C-based kiibohd firmware
+    if emitter == EmitterType::Kiibohd {
+        let mut layouts = Layouts::from_dir(PathBuf::from("layouts"));
+        let layout = layouts.get_layout("base/base.json");
+        dbg!(&layout.from_hid_keyboard);
 
-            let mut defaultmap = groups.defaultmap();
-            defaultmap.keymap = defaultmap.reduce(groups.basemap());
-            for s in &defaultmap.keymap {
-                println!("{}", s);
-            }
-
-            if args.debug {
-                let kll_data = KllDatastore::new(&defaultmap);
-                println!("{:?}", kll_data);
-            }
-
-            kll_compiler::emitters::kiibohdcore::verify(&groups).unwrap();
-
-            let outfile = env::current_dir().unwrap().join("generatedKeymap.h");
-            //kll_compiler::emitters::kiibohdcore::write(&outfile, &groups);
-            println!("Wrote {:?}", outfile);
+        let mut defaultmap = groups.defaultmap();
+        defaultmap.keymap = defaultmap.reduce(groups.basemap());
+        for s in &defaultmap.keymap {
+            println!("{}", s);
         }
-        // Old C-based kiibohd firmware
-        EmitterType::Kiibohd => {
-            let mut layouts = Layouts::from_dir(PathBuf::from("layouts"));
-            let layout = layouts.get_layout("base/base.json");
-            dbg!(&layout.from_hid_keyboard);
 
-            let mut defaultmap = groups.defaultmap();
-            defaultmap.keymap = defaultmap.reduce(groups.basemap());
-            for s in &defaultmap.keymap {
-                println!("{}", s);
-            }
-
-            if args.debug {
-                let kll_data = KllDatastore::new(&defaultmap);
-                println!("{:?}", kll_data);
-            }
-
-            let outfile = env::current_dir().unwrap().join("generatedKeymap.h");
-            kll_compiler::emitters::kiibohd::write(&outfile, &groups);
-            println!("Wrote {:?}", outfile);
+        if args.debug {
+            let kll_data = KllDatastore::new(&defaultmap);
+            println!("{:?}", kll_data);
         }
-        _ => {}
+
+        let outfile = env::current_dir().unwrap().join("generatedKeymap.h");
+        kll_compiler::emitters::kiibohd::write(&outfile, &groups);
+        println!("Wrote {:?}", outfile);
     }
 }
