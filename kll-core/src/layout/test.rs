@@ -365,7 +365,7 @@ fn basic_init_test() {
     trace!("RESULT_GUIDES: {:?}", RESULT_GUIDES);
 
     // Build lookup
-    let lookup = LayerLookup::<300>::new(
+    let lookup = LayerLookup::<256>::new(
         LAYER_LOOKUP,
         TRIGGER_GUIDES,
         RESULT_GUIDES,

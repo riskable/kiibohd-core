@@ -11,7 +11,7 @@ repository = "https://github.com/kiibohd/kiibohd-core"
 
 [dependencies]
 defmt = "0.3"
-heapless = { version = "0.7", features = ["defmt-impl"] }
+heapless = { version = "^0.7.10", features = ["defmt-impl"] }
 kiibohd-hid-io = { path = "../kiibohd-hid-io", optional = true }
 usb-device = { git = "https://github.com/haata/usb-device.git", features = ["defmt-impl"] }
 usbd-hid = { git = "https://github.com/haata/usbd-hid.git", features = ["defmt-impl"] }

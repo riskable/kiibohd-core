@@ -11,5 +11,5 @@ repository = "https://github.com/kiibohd/kiibohd-core"
 
 [dependencies]
 defmt           = "0.3"
-embedded-hal    = { version = "0.2.6", features = ["unproven"] }
-heapless        = "0.7"
+embedded-hal    = { version = "0.2.7", features = ["unproven"] }
+heapless        = "^0.7.10"

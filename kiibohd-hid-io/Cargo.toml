@@ -10,6 +10,6 @@ HID-IO protocol implementation for the C kiibohd firmware.
 edition = "2021"
 
 [dependencies]
-heapless        = { version = "^0.7" }
+heapless        = { version = "^0.7.10" }
 hid-io-protocol = { git = "https://github.com/hid-io/hid-io-core", default-features = false, features = ["device", "defmt-impl"] }
 pkg-version     = { version = "^1.0" }
