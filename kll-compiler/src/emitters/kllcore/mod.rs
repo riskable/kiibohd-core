@@ -22,7 +22,7 @@ pub struct KllCoreData<'a> {
 
 impl<'a> KllCoreData<'a> {
     /// Given KllState layers, generate datastructures for kll-core
-    pub fn new(layers: &[KllState<'a>]) -> Self {
+    pub fn new(layers: &mut [KllState<'a>]) -> Self {
         // Trigger and Result deduplication hashmaps
         let mut trigger_hash = HashMap::new();
         let mut result_hash = HashMap::new();
@@ -39,7 +39,10 @@ impl<'a> KllCoreData<'a> {
         let mut trigger_result_map: Vec<u16> = Vec::new();
         let mut layer_lookup: Vec<u8> = Vec::new();
 
-        for (layer_index, layer) in layers.iter().enumerate() {
+        for (layer_index, layer) in layers.iter_mut().enumerate() {
+            // Generate explicit state in layer
+            layer.generate_state_scheduling();
+
             for (trigger_list, result_list) in layer.trigger_result_lists() {
                 let mut trigger_guide = trigger_list.kll_core_guide();
                 // Determine if trigger guide has already been added
@@ -296,8 +299,9 @@ mod test {
         let test = fs::read_to_string("examples/kllcoretest.kll").unwrap();
         let result = KllFile::from_str(&test);
         let state = result.unwrap().into_struct();
-        let layers = vec![state];
-        let _kdata = KllCoreData::new(&layers);
+        let mut layers = vec![state];
+        println!("THIS: {:?}", layers);
+        let _kdata = KllCoreData::new(&mut layers);
 
         // TODO Validate
         // Load data structures into kll-core
@@ -329,11 +333,11 @@ pub fn verify(_groups: &KllGroups) -> Result<(), Error> {
 
 pub fn write(file: &Path, groups: &KllGroups) {
     // TODO Merge layouts correctly
-    let layers = &groups.base;
+    let mut layers = groups.base.clone();
     //let layers = &groups.default;
 
     // Generate kll-core datastructures
-    let kdata = KllCoreData::new(layers);
+    let kdata = KllCoreData::new(&mut layers);
 
     // Write rust file
     kdata.rust(file).unwrap();

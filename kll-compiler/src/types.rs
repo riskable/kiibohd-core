@@ -33,29 +33,33 @@ pub fn maybe_quote(text: &str) -> String {
 pub struct Mapping<'a>(pub TriggerList<'a>, pub TriggerMode, pub ResultList<'a>);
 
 impl<'a> Mapping<'a> {
-    pub fn implied_state(&self) -> Vec<Self> {
+    pub fn implied_state(&self) -> Option<Vec<Self>> {
         // TODO Handle other combinations of implied state
-        let triggerlists = self.0.implied_state();
-        let resultlists = self.2.implied_state();
-
-        let mut mappings = Vec::new();
-
-        // TODO Allow for other combinations other than just simple cases
-        if triggerlists.len() == 2 && resultlists.len() == 2 {
-            mappings.push(Self(
-                triggerlists[0].clone(),
-                self.1.clone(),
-                resultlists[0].clone(),
-            ));
-
-            mappings.push(Self(
-                triggerlists[1].clone(),
-                self.1.clone(),
-                resultlists[1].clone(),
-            ));
+        if let Some(triggerlists) = self.0.implied_state() {
+            if let Some(resultlists) = self.2.implied_state() {
+                // TODO Allow for other combinations other than just simple cases
+                if triggerlists.len() == 2 && resultlists.len() == 2 {
+                    Some(vec![
+                        Self(
+                            triggerlists[0].clone(),
+                            self.1.clone(),
+                            resultlists[0].clone(),
+                        ),
+                        Self(
+                            triggerlists[1].clone(),
+                            self.1.clone(),
+                            resultlists[1].clone(),
+                        ),
+                    ])
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
         }
-
-        mappings
     }
 }
 
@@ -91,7 +95,7 @@ impl<'a> TriggerList<'a> {
         buf
     }
 
-    fn implied_state(&self) -> Vec<Self> {
+    fn implied_state(&self) -> Option<Vec<Self>> {
         // TODO
         // Return permutations of implied TriggerList states
         // TODO
@@ -104,11 +108,12 @@ impl<'a> TriggerList<'a> {
             self.0[0].len() == 1,
             "TriggerList must only have 1 combo element. (feature may not be implemented yet)"
         );
-        let triggers = self.0[0][0].implied_state();
-        vec![
-            Self(vec![vec![triggers[0].clone()]]),
-            Self(vec![vec![triggers[1].clone()]]),
-        ]
+        self.0[0][0].implied_state().map(|triggers| {
+            vec![
+                Self(vec![vec![triggers[0].clone()]]),
+                Self(vec![vec![triggers[1].clone()]]),
+            ]
+        })
     }
 }
 
@@ -156,7 +161,7 @@ impl<'a> ResultList<'a> {
         buf
     }
 
-    fn implied_state(&self) -> Vec<Self> {
+    fn implied_state(&self) -> Option<Vec<Self>> {
         // TODO
         // Return permutations of implied ResultList states
         // TODO
@@ -169,11 +174,11 @@ impl<'a> ResultList<'a> {
             self.0[0].len() == 1,
             "ResultList must only have 1 combo element. (feature may not be implemented yet)"
         );
-        let results = self.0[0][0].implied_state();
-        vec![
+        let results = self.0[0][0].implied_state().unwrap();
+        Some(vec![
             Self(vec![vec![results[0].clone()]]),
             Self(vec![vec![results[1].clone()]]),
-        ]
+        ])
     }
 }
 
@@ -516,10 +521,10 @@ impl<'a> Trigger<'a> {
     /// Converts S1 : U"A"; to (trigger part)
     ///    S1(P) : U"A"(P);
     ///    S1(R) : U"A"(R);
-    fn implied_state(&self) -> Vec<Self> {
+    fn implied_state(&self) -> Option<Vec<Self>> {
         // No state (implied state), generate new triggers
         if self.state.is_none() {
-            vec![
+            Some(vec![
                 Self {
                     trigger: self.trigger.clone(),
                     state: Some(StateMap::new(vec![State {
@@ -534,9 +539,9 @@ impl<'a> Trigger<'a> {
                         time: None,
                     }])),
                 },
-            ]
+            ])
         } else {
-            vec![self.clone()]
+            None
         }
     }
 }
@@ -804,10 +809,10 @@ impl<'a> Action<'a> {
     /// Converts S1 : U"A"; to (action/result part)
     ///    S1(P) : U"A"(P);
     ///    S1(R) : U"A"(R);
-    fn implied_state(&self) -> Vec<Self> {
+    fn implied_state(&self) -> Option<Vec<Self>> {
         // No state (implied state), generate new actions
         if self.state.is_none() {
-            vec![
+            Some(vec![
                 Self {
                     result: self.result.clone(),
                     state: Some(StateMap::new(vec![State {
@@ -822,9 +827,9 @@ impl<'a> Action<'a> {
                         time: None,
                     }])),
                 },
-            ]
+            ])
         } else {
-            vec![self.clone()]
+            None
         }
     }
 }

@@ -259,6 +259,23 @@ impl<'a> KllState<'a> {
 
         new_keymap
     }
+
+    /// Replaces any implied (KLL) state with explicit state
+    pub fn generate_state_scheduling(&mut self) {
+        // Generate explicit state for each Mapping
+        // Determine if we should use Result/Option for implied_state (probably option?)
+        // Build new keymap Vector with new keymapping
+        let mut new_keymap = Vec::new();
+        for mapping in &self.keymap {
+            if let Some(mut mapping_vec) = mapping.implied_state() {
+                new_keymap.append(&mut mapping_vec);
+            } else {
+                new_keymap.push(mapping.clone());
+            }
+        }
+
+        self.keymap = new_keymap;
+    }
 }
 
 #[derive(Debug, Default, Clone)]
