@@ -1,13 +1,26 @@
+// Copyright 2021-2022 Jacob Alexander
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
 use crate::types::{Key, TriggerType};
 use crate::{KllGroups, KllState};
+use layouts_rs::Layouts;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
 
+mod test;
+
+/// Key: (trigger_guide, result_guide)
+/// Value: (trigger_pos, result_pos, trigger_result_map pos)
 type TriggerResultHash = HashMap<(Vec<u8>, Vec<u8>), (usize, usize, usize)>;
 
 #[allow(dead_code)]
+#[derive(Debug)]
 pub struct KllCoreData<'a> {
     layers: Vec<KllState<'a>>,
     pub trigger_hash: HashMap<Vec<u8>, usize>,
@@ -17,12 +30,12 @@ pub struct KllCoreData<'a> {
     pub trigger_guides: Vec<u8>,
     pub result_guides: Vec<u8>,
     pub trigger_result_map: Vec<u16>,
-    pub layer_lookup: Vec<u8>,
+    pub raw_layer_lookup: Vec<u8>,
 }
 
 impl<'a> KllCoreData<'a> {
     /// Given KllState layers, generate datastructures for kll-core
-    pub fn new(layers: &mut [KllState<'a>]) -> Self {
+    pub fn new(layers: &mut [KllState<'a>], layouts: Layouts) -> Self {
         // Trigger and Result deduplication hashmaps
         let mut trigger_hash = HashMap::new();
         let mut result_hash = HashMap::new();
@@ -37,30 +50,30 @@ impl<'a> KllCoreData<'a> {
         let mut trigger_guides = Vec::new();
         let mut result_guides = Vec::new();
         let mut trigger_result_map: Vec<u16> = Vec::new();
-        let mut layer_lookup: Vec<u8> = Vec::new();
+        let mut raw_layer_lookup: Vec<u8> = Vec::new();
 
         for (layer_index, layer) in layers.iter_mut().enumerate() {
             // Generate explicit state in layer
             layer.generate_state_scheduling();
 
             for (trigger_list, result_list) in layer.trigger_result_lists() {
-                let mut trigger_guide = trigger_list.kll_core_guide();
+                let trigger_guide = trigger_list.kll_core_guide();
                 // Determine if trigger guide has already been added
                 let trigger_pos =
                     match trigger_hash.try_insert(trigger_guide.clone(), trigger_guide.len()) {
                         Ok(pos) => {
-                            trigger_guides.append(&mut trigger_guide);
+                            trigger_guides.append(&mut trigger_guide.clone());
                             *pos
                         }
                         Err(err) => *err.entry.get(),
                     };
 
-                let mut result_guide = result_list.kll_core_guide();
+                let result_guide = result_list.kll_core_guide(layouts.clone());
                 // Determine if result guide has already been added
                 let result_pos =
                     match result_hash.try_insert(result_guide.clone(), result_guide.len()) {
                         Ok(pos) => {
-                            result_guides.append(&mut result_guide);
+                            result_guides.append(&mut result_guide.clone());
                             *pos
                         }
                         Err(err) => *err.entry.get(),
@@ -71,7 +84,7 @@ impl<'a> KllCoreData<'a> {
                 // and the trigger_result_map index position (needed for the layer lookup)
                 if trigger_result_hash
                     .try_insert(
-                        (trigger_guide, result_guide),
+                        (trigger_guide.clone(), result_guide),
                         (trigger_pos, result_pos, trigger_result_map.len()),
                     )
                     .is_ok()
@@ -84,7 +97,7 @@ impl<'a> KllCoreData<'a> {
             // Iterate again to build the necessary layer lookup
             for (trigger_list, result_list) in layer.trigger_result_lists() {
                 let trigger_guide = trigger_list.kll_core_guide();
-                let result_guide = result_list.kll_core_guide();
+                let result_guide = result_list.kll_core_guide(layouts.clone());
 
                 // Lookup position in trigger:result lookup
                 let (_, _, trigger_result_pos) =
@@ -120,12 +133,12 @@ impl<'a> KllCoreData<'a> {
 
         // After generating the layer lookup hash generate the binary form
         for ((layer, index_type, index), triggers) in &layer_lookup_hash {
-            layer_lookup.push(*layer);
-            layer_lookup.push(*index_type);
-            layer_lookup.append(&mut Vec::from(index.to_le_bytes()));
-            layer_lookup.push(triggers.len().try_into().unwrap());
+            raw_layer_lookup.push(*layer);
+            raw_layer_lookup.push(*index_type);
+            raw_layer_lookup.append(&mut Vec::from(index.to_le_bytes()));
+            raw_layer_lookup.push(triggers.len().try_into().unwrap());
             for trigger in triggers {
-                layer_lookup.append(&mut Vec::from(trigger.to_le_bytes()));
+                raw_layer_lookup.append(&mut Vec::from(trigger.to_le_bytes()));
             }
         }
 
@@ -138,7 +151,7 @@ impl<'a> KllCoreData<'a> {
             trigger_guides,
             result_guides,
             trigger_result_map,
-            layer_lookup,
+            raw_layer_lookup,
         }
     }
 
@@ -158,9 +171,9 @@ impl<'a> KllCoreData<'a> {
         for elem in &self.trigger_result_map {
             trigger_result_mapping += &format!("{}, ", elem).to_string();
         }
-        let mut layer_lookup = String::new();
-        for elem in &self.layer_lookup {
-            layer_lookup += &format!("{}, ", elem).to_string();
+        let mut raw_layer_lookup = String::new();
+        for elem in &self.raw_layer_lookup {
+            raw_layer_lookup += &format!("{}, ", elem).to_string();
         }
 
         file.write_all(
@@ -184,7 +197,7 @@ pub const TRIGGER_RESULT_MAPPING: &'static [u8] = &[{}];
 /// Raw Layer Lookup Table
 pub const LAYER_LOOKUP: &'static [u8] = &[{}];
 ",
-                trigger_guides, result_guides, trigger_result_mapping, layer_lookup
+                trigger_guides, result_guides, trigger_result_mapping, raw_layer_lookup
             )
             .into_bytes(),
         )?;
@@ -202,125 +215,6 @@ pub const LAYER_LOOKUP: &'static [u8] = &[{}];
     */
 }
 
-#[cfg(test)]
-mod test {
-    use crate::emitters::kllcore::KllCoreData;
-    use crate::types::KllFile;
-    use std::collections::HashMap;
-    use std::fs;
-
-    #[test]
-    fn trigger() {
-        let test = fs::read_to_string("examples/kllcoretest.kll").unwrap();
-        let result = KllFile::from_str(&test);
-        let state = result.unwrap().into_struct();
-
-        // Generate trigger guides
-        let mut trigger_guides = Vec::new();
-        for trigger_list in state.trigger_lists() {
-            let mut guide = trigger_list.kll_core_guide();
-            trigger_guides.append(&mut guide);
-        }
-
-        // TODO Validate
-    }
-
-    #[test]
-    fn result() {
-        let test = fs::read_to_string("examples/kllcoretest.kll").unwrap();
-        let result = KllFile::from_str(&test);
-        let state = result.unwrap().into_struct();
-
-        // Generate result guides
-        let mut result_guides = Vec::new();
-        for result_list in state.result_lists() {
-            let mut guide = result_list.kll_core_guide();
-            result_guides.append(&mut guide);
-        }
-
-        // TODO Validate
-    }
-
-    #[test]
-    fn trigger_result() {
-        let test = fs::read_to_string("examples/kllcoretest.kll").unwrap();
-        let result = KllFile::from_str(&test);
-        let state = result.unwrap().into_struct();
-
-        // Trigger and Result deduplication hashmaps
-        let mut trigger_hash = HashMap::new();
-        let mut result_hash = HashMap::new();
-
-        // Trigger:Result mapping hashmap
-        let mut trigger_result_hash = HashMap::new();
-
-        // Generate trigger and result guides as well as the trigger result mapping
-        let mut trigger_guides = Vec::new();
-        let mut result_guides = Vec::new();
-        let mut trigger_result_map: Vec<u16> = Vec::new();
-        for (trigger_list, result_list) in state.trigger_result_lists() {
-            let mut trigger_guide = trigger_list.kll_core_guide();
-            // Determine if trigger guide has already been added
-            let trigger_pos =
-                match trigger_hash.try_insert(trigger_guide.clone(), trigger_guide.len()) {
-                    Ok(pos) => {
-                        trigger_guides.append(&mut trigger_guide);
-                        *pos
-                    }
-                    Err(err) => err.entry.get().clone(),
-                };
-
-            let mut result_guide = result_list.kll_core_guide();
-            // Determine if result guide has already been added
-            let result_pos = match result_hash.try_insert(result_guide.clone(), result_guide.len())
-            {
-                Ok(pos) => {
-                    result_guides.append(&mut result_guide);
-                    *pos
-                }
-                Err(err) => err.entry.get().clone(),
-            };
-
-            // Add trigger:result mapping
-            if trigger_result_hash
-                .insert((trigger_guide, result_guide), (trigger_pos, result_pos))
-                .is_none()
-            {
-                trigger_result_map.push(trigger_pos as u16);
-                trigger_result_map.push(result_pos as u16);
-            }
-        }
-
-        // TODO Validate
-    }
-
-    #[test]
-    fn layer_lookup_simple() {
-        let test = fs::read_to_string("examples/kllcoretest.kll").unwrap();
-        let result = KllFile::from_str(&test);
-        let state = result.unwrap().into_struct();
-        let mut layers = vec![state];
-        println!("THIS: {:?}", layers);
-        let _kdata = KllCoreData::new(&mut layers);
-
-        // TODO Validate
-        // Load data structures into kll-core
-        // Pipe valid input commands
-        // Verify command outputs
-    }
-
-    #[test]
-    fn generate_binary() {
-        // todo needs an offset table for the firmware to know where the pointers
-        // are
-    }
-
-    #[test]
-    fn generate_rust() {
-        // todo
-    }
-}
-
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Error {
     ParsingError,
@@ -331,13 +225,13 @@ pub fn verify(_groups: &KllGroups) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn write(file: &Path, groups: &KllGroups) {
+pub fn write(file: &Path, groups: &KllGroups, layouts: Layouts) {
     // TODO Merge layouts correctly
     let mut layers = groups.base.clone();
     //let layers = &groups.default;
 
     // Generate kll-core datastructures
-    let kdata = KllCoreData::new(&mut layers);
+    let kdata = KllCoreData::new(&mut layers, layouts);
 
     // Write rust file
     kdata.rust(file).unwrap();

@@ -1,0 +1,3 @@
+[submodule "kll-compiler/layouts"]
+	path = kll-compiler/layouts
+	url = https://github.com/hid-io/layouts.git

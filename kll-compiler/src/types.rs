@@ -1,4 +1,4 @@
-use layouts_rs::Layout;
+use layouts_rs::{Layout, Layouts};
 use std::collections::HashMap;
 use std::fmt;
 use std::ops::Range;
@@ -144,7 +144,7 @@ impl<'a> ResultList<'a> {
     }
 
     /// Converts the ResultList into a kll-core result guide
-    pub fn kll_core_guide(&self) -> Vec<u8> {
+    pub fn kll_core_guide(&self, layouts: Layouts) -> Vec<u8> {
         let mut buf = Vec::new();
         for combo in &self.0 {
             // Push the length of the combo
@@ -152,7 +152,7 @@ impl<'a> ResultList<'a> {
             // Push each combo element
             for elem in combo {
                 unsafe {
-                    buf.extend_from_slice(elem.kll_core_condition().bytes());
+                    buf.extend_from_slice(elem.kll_core_condition(layouts.clone()).bytes());
                 }
             }
         }
@@ -462,13 +462,14 @@ impl<'a> Trigger<'a> {
         // generate_state_scheduling() function can be used to compute if
         // it's not defined.
         assert!(self.state.is_some(), "state *must* be defined, use generate_state_scheduling() to convert implied state into implicit state.");
+        assert!(self.state.as_ref().unwrap().states.len() == 1, "StateMap *must* only have a single state defined, need to expand into a sequence first.");
 
         match &self.trigger {
             TriggerType::Key(key) => {
                 match key {
                     Key::Scancode(index) => {
                         kll_core::TriggerCondition::Switch {
-                            state: kll_core::trigger::Phro::Press, // TODO from compiler state
+                            state: self.state.as_ref().unwrap().states[0].kind.phro(),
                             index: *index as u16,
                             loop_condition_index: 0, // TODO
                         }
@@ -631,6 +632,32 @@ pub enum StateType {
     Off,        // (Off)
 }
 
+impl StateType {
+    /// Converts StateType into a kll_core phro state
+    pub fn phro(&self) -> kll_core::trigger::Phro {
+        match self {
+            StateType::Hold => kll_core::trigger::Phro::Hold,
+            StateType::Off => kll_core::trigger::Phro::Off,
+            StateType::Press => kll_core::trigger::Phro::Press,
+            StateType::Release => kll_core::trigger::Phro::Release,
+            _ => {
+                panic!("Invalid phro StateType: {:?}", self);
+            }
+        }
+    }
+
+    /// Converts StateType into a kll_core CapabilityState
+    pub fn capability_state(&self) -> kll_core::CapabilityState {
+        match self {
+            StateType::Press => kll_core::CapabilityState::Initial,
+            StateType::Release => kll_core::CapabilityState::Last,
+            _ => {
+                panic!("{:?} not implemented/unsupported", self);
+            }
+        }
+    }
+}
+
 impl FromStr for StateType {
     type Err = Error;
 
@@ -760,22 +787,25 @@ pub struct Action<'a> {
 
 impl<'a> Action<'a> {
     /// Converts to a kll-core Capability definition
-    fn kll_core_condition(&self) -> kll_core::Capability {
+    fn kll_core_condition(&self, mut layouts: Layouts) -> kll_core::Capability {
         // State must be defined
         // generate_state_scheduling() function can be used to compute if
         // it's not defined.
         assert!(self.state.is_some(), "state *must* be defined, use generate_state_scheduling() to convert implied state into implicit state.");
+        assert!(self.state.as_ref().unwrap().states.len() == 1, "StateMap *must* only have a single state defined, need to expand into a sequence first.");
 
+        let layout = layouts.get_layout("base/base.json");
         match &self.result {
             ResultType::Output(key) => {
+                let id = key.value(&layout);
                 match key {
                     Key::Usb(_value) => {
-                        // TODO Lookup usb value
-                        let id = kll_core::kll_hid::Keyboard::A;
                         kll_core::Capability::HidKeyboard {
-                            state: kll_core::CapabilityState::Initial, // TODO
-                            loop_condition_index: 0,                   // TODO
-                            id,
+                            state: self.state.as_ref().unwrap().states[0]
+                                .kind
+                                .capability_state(),
+                            loop_condition_index: 0, // TODO
+                            id: kll_core::kll_hid::Keyboard::from(id as u16),
                         }
                     }
                     _ => kll_core::Capability::NoOp {

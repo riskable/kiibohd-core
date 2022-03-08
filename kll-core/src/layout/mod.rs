@@ -231,4 +231,10 @@ impl<'a, const SIZE: usize> LayerLookup<'a, SIZE> {
         let cond = unsafe { core::slice::from_raw_parts(ptr as *const Capability, count) };
         Some(cond)
     }
+
+    /// Convience access for layer_lookup
+    /// Useful when trying to get a list of all possible triggers
+    pub fn layer_lookup(&self) -> &FnvIndexMap<(u8, u8, u16), usize, SIZE> {
+        &self.layer_lookup
+    }
 }

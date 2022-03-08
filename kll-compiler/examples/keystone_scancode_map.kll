@@ -1,0 +1,121 @@
+# Keystone Base Configuration
+
+Name = KeystoneTKL;
+Version = 0.5;
+Author = "HaaTa (Jacob Alexander) 2019-2022";
+
+# Modified Date
+Date = 2022-02-13;
+
+
+
+# Keys
+S1 : U"Esc";
+
+#S2 : U"F1";
+#S3 : U"F2";
+#S4 : U"F3";
+#S5 : U"F4";
+#
+#S6 : U"F5";
+#S7 : U"F6";
+#S8 : U"F7";
+#S9  : U"F8";
+#S10 : U"F9";
+#S11 : U"F10";
+#S12 : U"F11";
+#S13 : U"F12";
+#S14 : U"Print Screen";
+#S15 : U"Scroll Lock";
+#S16 : U"Pause";
+#
+#
+#S17 : U"Backtick";
+#S18 : U"1";
+#S19 : U"2";
+#S20 : U"3";
+#S21 : U"4";
+#S22 : U"5";
+#S23 : U"6";
+#S24 : U"7";
+#S25 : U"8";
+#S26 : U"9";
+#S27 : U"0";
+#S28 : U"-";
+#S29 : U"=";
+#
+#S31 : U"Backspace";
+#S32 : U"Insert";
+#S33 : U"Home";
+#S34 : U"Page Up";
+#
+#
+#S35 : U"Tab";
+#S36 : U"Q";
+#S37 : U"W";
+#S38 : U"E";
+#S39 : U"R";
+#S40 : U"T";
+#S41 : U"Y";
+#S42 : U"U";
+#S43 : U"I";
+#S44 : U"O";
+#S45 : U"P";
+#S46 : U"[";
+#S47 : U"]";
+#
+#S48 : U"Backslash";
+#S49 : U"Delete";
+#S50 : U"End";
+#S51 : U"Page Down";
+#
+#
+#S52 : U"Caps Lock";
+#
+#S53 : U"A";
+#S54 : U"S";
+#S55 : U"D";
+#S56 : U"F";
+#S57 : U"G";
+#S58 : U"H";
+#S59 : U"J";
+#S60 : U"K";
+#S61 : U"L";
+#S62 : U";";
+#S63 : U"'";
+#
+#S65 : U"Enter";
+#
+#
+#S66 : U"LShift";
+#
+#S68 : U"Z";
+#S69 : U"X";
+#S70 : U"C";
+#S71 : U"V";
+#S72 : U"B";
+#S73 : U"N";
+#S74 : U"M";
+#S75 : U",";
+#S76 : U".";
+#S77 : U"/";
+#
+#S78 : U"RShift";
+#
+#S80 : U"Up";
+#
+#
+#S81 : U"LCtrl";
+#S82 : U"LGui";
+#S83 : U"LAlt";
+#
+#S85 : U"Space";
+#
+#S88 : U"RAlt";
+#S89 : U"RGui";
+#
+#S90 : U"Menu";
+#S91 : U"RCtrl";
+#S92 : U"Left";
+#S93 : U"Down";
+#S94 : U"Right";
