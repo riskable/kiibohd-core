@@ -715,17 +715,22 @@ pub enum Key<'a> {
     None,
 }
 
+/// Converts from string to int, returing None if None was passed as the input
+fn parse_int_option(input: Option<&String>) -> Option<usize> {
+    use crate::parser::parse_int;
+    input.map(|val| parse_int(val))
+}
+
 impl<'a> Key<'a> {
-    pub fn value(&self, layout: &Layout) -> usize {
-        use crate::parser::parse_int;
+    pub fn value(&self, layout: &Layout) -> Option<usize> {
         match self {
-            Key::Scancode(num) => *num,
-            Key::Char(c) => parse_int(&layout.from_hid_keyboard[*c]),
-            Key::Usb(name) => parse_int(&layout.from_hid_keyboard[*name]),
-            Key::Consumer(name) => parse_int(&layout.from_hid_consumer[*name]),
-            Key::System(name) => parse_int(&layout.from_hid_sysctrl[*name]),
-            Key::Unicode(_) => 0, // xxx
-            Key::None => 0,
+            Key::Scancode(num) => Some(*num),
+            Key::Char(c) => parse_int_option(layout.from_hid_keyboard.get(*c)),
+            Key::Usb(name) => parse_int_option(layout.from_hid_keyboard.get(*name)),
+            Key::Consumer(name) => parse_int_option(layout.from_hid_consumer.get(*name)),
+            Key::System(name) => parse_int_option(layout.from_hid_sysctrl.get(*name)),
+            Key::Unicode(_) => None, // xxx
+            Key::None => None,
         }
     }
 }
@@ -797,7 +802,12 @@ impl<'a> Action<'a> {
         let layout = layouts.get_layout("base/base.json");
         match &self.result {
             ResultType::Output(key) => {
-                let id = key.value(&layout);
+                let id = match key.value(&layout) {
+                    Some(id) => id,
+                    None => {
+                        panic!("{:?} doesn't match a USB HID key.", key);
+                    }
+                };
                 match key {
                     Key::Usb(_value) => {
                         kll_core::Capability::HidKeyboard {
