@@ -825,22 +825,26 @@ impl<'a> Action<'a> {
                 }
             }
             ResultType::Layer((_mode, _indices)) => {
-                panic!("Incomplete");
+                panic!("Incomplete {:?}", &self.result);
             }
             ResultType::Animation(_animation_result) => {
-                panic!("Incomplete");
+                panic!("Incomplete {:?}", &self.result);
             }
             ResultType::Capability((_capability, _state)) => {
-                panic!("Incomplete");
+                panic!("Incomplete {:?}", &self.result);
             }
             ResultType::Text(_text) => {
-                panic!("Incomplete");
+                panic!("Incomplete {:?}", &self.result);
             }
             ResultType::UnicodeText(_text) => {
-                panic!("Incomplete");
+                panic!("Incomplete {:?}", &self.result);
             }
+            ResultType::NOP => kll_core::Capability::NoOp {
+                state: kll_core::CapabilityState::None,
+                loop_condition_index: 0,
+            },
             _ => {
-                panic!("Incomplete");
+                panic!("Incomplete {:?}", &self.result);
             }
         }
     }

@@ -155,8 +155,15 @@ impl KLLParser {
                 }
             },
             [kvmap(map), channel(c)..] => {
+                // Retrieve range and print a message if there are problems
+                // TODO - Print line number on error
                 Pixel {
-                    range: PixelRange::from_map(map).unwrap(), // XXX Handle error
+                    range: match PixelRange::from_map(map.clone()) {
+                        Ok(range) => range,
+                        Err(err) => {
+                            panic!("Could not collect PixelRange from map({:?}) - Error({})", map, err);
+                        }
+                    }, // XXX Handle error
                     channel_values: c.collect(),
                 }
             }
