@@ -185,17 +185,17 @@ impl<'a> KllCoreData<'a> {
 
 /// Trigger Guides
 /// Traces sequences of scancodes
-pub const TRIGGER_GUIDES: &'static [u8] = &[{}];
+pub const TRIGGER_GUIDES: &[u8] = &[{}];
 
 /// Result Guides
 /// Traces sequences of capabilities
-pub const RESULT_GUIDES: &'static [u8] = &[{}];
+pub const RESULT_GUIDES: &[u8] = &[{}];
 
 /// Trigger:Result Mapping
-pub const TRIGGER_RESULT_MAPPING: &'static [u8] = &[{}];
+pub const TRIGGER_RESULT_MAPPING: &[u8] = &[{}];
 
 /// Raw Layer Lookup Table
-pub const LAYER_LOOKUP: &'static [u8] = &[{}];
+pub const LAYER_LOOKUP: &[u8] = &[{}];
 ",
                 trigger_guides, result_guides, trigger_result_mapping, raw_layer_lookup
             )
