@@ -364,12 +364,17 @@ fn basic_init_test() {
     );
     trace!("RESULT_GUIDES: {:?}", RESULT_GUIDES);
 
+    // Loop Condition Lookup
+    // NOTE: This lookup must always have at least 1 entry.
+    const LOOP_CONDITION_LOOKUP: &'static [u32] = &[0];
+
     // Build lookup
     let lookup = LayerLookup::<256>::new(
         LAYER_LOOKUP,
         TRIGGER_GUIDES,
         RESULT_GUIDES,
         TRIGGER_RESULT_MAPPING,
+        LOOP_CONDITION_LOOKUP,
     );
 
     // Print out valid lookups
@@ -482,3 +487,10 @@ fn basic_init_test() {
         }
     }
 }
+
+// TODO Tests
+// - Basic trigger -> result capability validation test
+// - Import KLL file and do a handful of manual validation (positive test cases)
+// - Import KLL file and do a handful of manual validation (negative test cases)
+// - Import KLL, retrieve json (or similar datastructure) and automate all triggers and make sure
+// all results are reached

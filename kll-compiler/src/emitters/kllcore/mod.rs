@@ -8,6 +8,7 @@
 use crate::types::{Key, TriggerType};
 use crate::{KllGroups, KllState};
 use layouts_rs::Layouts;
+use log::*;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::prelude::*;
@@ -60,7 +61,7 @@ impl<'a> KllCoreData<'a> {
                 let trigger_guide = trigger_list.kll_core_guide();
                 // Determine if trigger guide has already been added
                 let trigger_pos =
-                    match trigger_hash.try_insert(trigger_guide.clone(), trigger_guide.len()) {
+                    match trigger_hash.try_insert(trigger_guide.clone(), trigger_guides.len()) {
                         Ok(pos) => {
                             trigger_guides.append(&mut trigger_guide.clone());
                             *pos
@@ -71,7 +72,7 @@ impl<'a> KllCoreData<'a> {
                 let result_guide = result_list.kll_core_guide(layouts.clone());
                 // Determine if result guide has already been added
                 let result_pos =
-                    match result_hash.try_insert(result_guide.clone(), result_guide.len()) {
+                    match result_hash.try_insert(result_guide.clone(), result_guides.len()) {
                         Ok(pos) => {
                             result_guides.append(&mut result_guide.clone());
                             *pos
@@ -125,11 +126,11 @@ impl<'a> KllCoreData<'a> {
                     layer_lookup_hash
                         .entry((layer_index as u8, index_type, index))
                         .and_modify(|e| e.push(trigger_result_pos as u16))
-                        .or_insert(Vec::new())
-                        .push(trigger_result_pos as u16);
+                        .or_insert_with(|| Vec::from([trigger_result_pos as u16]));
                 }
             }
         }
+        trace!("layer_lookup_hash: {:?}", layer_lookup_hash);
 
         // After generating the layer lookup hash generate the binary form
         for ((layer, index_type, index), triggers) in &layer_lookup_hash {
@@ -137,6 +138,7 @@ impl<'a> KllCoreData<'a> {
             raw_layer_lookup.push(*index_type);
             raw_layer_lookup.append(&mut Vec::from(index.to_le_bytes()));
             raw_layer_lookup.push(triggers.len().try_into().unwrap());
+            trace!("triggers: {:?}", triggers);
             for trigger in triggers {
                 raw_layer_lookup.append(&mut Vec::from(trigger.to_le_bytes()));
             }

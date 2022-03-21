@@ -6,15 +6,17 @@ license = "MIT OR Apache-2.0"
 edition = "2021"
 
 [dependencies]
-byteorder         = { version = "1.3", default-features = false }
-defmt             = "0.3"
-embedded-time     = "0.12"
-heapless          = "^0.7.10"
-kll-hid           = { path = "../kll-hid" }
-kll-macros        = { path = "../kll-macros" }
-log               = { version = "^0.4" }
-static_assertions = "1.1"
-transmute         = "0.1"
+byteorder             = { version = "1.3", default-features = false }
+defmt                 = "0.3"
+embedded-time         = "0.12"
+enum-primitive-derive = "0.2.2"
+heapless              = "^0.7.10"
+kll-hid               = { path = "../kll-hid" }
+kll-macros            = { path = "../kll-macros" }
+log                   = { version = "^0.4" }
+num-traits            = "0.2"
+static_assertions     = "1.1"
+transmute             = "0.1"
 
 [dev-dependencies]
 flexi_logger  = "^0.16"

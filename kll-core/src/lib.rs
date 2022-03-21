@@ -1,4 +1,4 @@
-// Copyright 2021 Jacob Alexander
+// Copyright 2021-2022 Jacob Alexander
 //
 // Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
 // http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
@@ -9,9 +9,13 @@
 #![feature(arbitrary_enum_discriminant)]
 #![feature(const_ptr_read)]
 #![feature(const_slice_from_raw_parts)]
+#![feature(let_chains)]
 
 #[macro_use]
 extern crate static_assertions;
+#[macro_use]
+extern crate enum_primitive_derive;
+extern crate num_traits;
 
 mod converters;
 pub mod layout;
@@ -41,6 +45,9 @@ pub mod hid {
 }
 
 pub mod layer {
+    use core::ops::{BitAnd, BitAndAssign, BitOrAssign, Not};
+    use num_traits::FromPrimitive;
+
     #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
     #[repr(u8)]
     pub enum Direction {
@@ -50,7 +57,7 @@ pub mod layer {
         Previous = 1,
     }
 
-    #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+    #[derive(Copy, Clone, Debug, PartialEq, defmt::Format, Primitive)]
     #[repr(u8)]
     pub enum State {
         /// No layer state
@@ -69,6 +76,78 @@ pub mod layer {
         LatchLock = 0x06,
         /// Shift+Latch+Lock state
         ShiftLatchLock = 0x07,
+    }
+
+    impl State {
+        /// Adds the given state to this state
+        /// This is a bitwise or operation
+        pub fn add(mut self, state: State) {
+            self |= state;
+        }
+
+        /// Removes the given state from this state
+        /// This is a bitwise nand operation
+        pub fn remove(mut self, state: State) {
+            self &= !(state);
+        }
+
+        /// Determine if the given state is present in this state
+        pub fn is_set(&self, state: State) -> bool {
+            if state != State::Off {
+                *self & state != State::Off
+            } else {
+                *self == state
+            }
+        }
+
+        /// Check if layer is active (e.g. not Off)
+        pub fn active(&self) -> bool {
+            *self != State::Off
+        }
+
+        /// Effective state
+        /// If the state is Off or two states are set, set as disabled
+        /// (e.g. Lock + Shift disables the state)
+        pub fn effective(&self) -> bool {
+            match self {
+                State::Off => false,
+                State::Shift => true,
+                State::Latch => true,
+                State::Lock => true,
+                State::ShiftLatch => false,
+                State::ShiftLock => false,
+                State::LatchLock => false,
+                State::ShiftLatchLock => true,
+            }
+        }
+    }
+
+    impl BitAnd for State {
+        type Output = Self;
+
+        fn bitand(self, rhs: Self) -> Self::Output {
+            State::from_u32(self as u32 & rhs as u32).unwrap()
+        }
+    }
+
+    impl BitAndAssign for State {
+        fn bitand_assign(&mut self, rhs: Self) {
+            *self = State::from_u32(*self as u32 & rhs as u32).unwrap()
+        }
+    }
+
+    impl BitOrAssign for State {
+        fn bitor_assign(&mut self, rhs: Self) {
+            *self = State::from_u32(*self as u32 | rhs as u32).unwrap()
+        }
+    }
+
+    impl Not for State {
+        type Output = Self;
+
+        fn not(self) -> Self::Output {
+            State::from_u32(!(self as u32)).unwrap()
+        }
     }
 }
 
@@ -435,6 +514,123 @@ pub enum Capability {
     },
 }
 
+impl Capability {
+    /// Generate a CapabilityRun using a Capability + TriggerEvent
+    /// The TriggerEvent is only important when CapabilityState::Passthrough is set.
+    pub fn generate(&self, event: TriggerEvent, _loop_condition_lookup: &[u32]) -> CapabilityRun {
+        // TODO: Handle loop_condition_index
+        match self {
+            Capability::NoOp { state, .. } => CapabilityRun::NoOp {
+                state: state.event(event),
+            },
+            Capability::HidKeyboard { state, id, .. } => CapabilityRun::HidKeyboard {
+                state: state.event(event),
+                id: *id,
+            },
+            _ => {
+                panic!(
+                    "Missing implementation for Capability::generate: {:?}",
+                    self
+                );
+            }
+        }
+    }
+
+    /// Lookup loop_condition_index
+    pub fn loop_condition_index(&self) -> u16 {
+        match self {
+            Capability::NoOp {
+                loop_condition_index,
+                ..
+            } => *loop_condition_index,
+            Capability::Rotate {
+                loop_condition_index,
+                ..
+            } => *loop_condition_index,
+            Capability::LayerClear {
+                loop_condition_index,
+                ..
+            } => *loop_condition_index,
+            Capability::LayerState {
+                loop_condition_index,
+                ..
+            } => *loop_condition_index,
+            Capability::LayerRotate {
+                loop_condition_index,
+                ..
+            } => *loop_condition_index,
+            Capability::HidProtocol {
+                loop_condition_index,
+                ..
+            } => *loop_condition_index,
+            Capability::HidKeyboard {
+                loop_condition_index,
+                ..
+            } => *loop_condition_index,
+            Capability::HidKeyboardState {
+                loop_condition_index,
+                ..
+            } => *loop_condition_index,
+            Capability::HidConsumerControl {
+                loop_condition_index,
+                ..
+            } => *loop_condition_index,
+            Capability::HidSystemControl {
+                loop_condition_index,
+                ..
+            } => *loop_condition_index,
+            Capability::McuFlashMode {
+                loop_condition_index,
+                ..
+            } => *loop_condition_index,
+            Capability::PixelAnimationControl {
+                loop_condition_index,
+                ..
+            } => *loop_condition_index,
+            Capability::PixelAnimationIndex {
+                loop_condition_index,
+                ..
+            } => *loop_condition_index,
+            Capability::PixelFadeControl {
+                loop_condition_index,
+                ..
+            } => *loop_condition_index,
+            Capability::PixelFadeLayer {
+                loop_condition_index,
+                ..
+            } => *loop_condition_index,
+            Capability::PixelFadeSet {
+                loop_condition_index,
+                ..
+            } => *loop_condition_index,
+            Capability::PixelGammaControl {
+                loop_condition_index,
+                ..
+            } => *loop_condition_index,
+            Capability::PixelLedControl {
+                loop_condition_index,
+                ..
+            } => *loop_condition_index,
+            Capability::PixelTest {
+                loop_condition_index,
+                ..
+            } => *loop_condition_index,
+            Capability::HidioOpenUrl {
+                loop_condition_index,
+                ..
+            } => *loop_condition_index,
+            Capability::HidioUnicodeString {
+                loop_condition_index,
+                ..
+            } => *loop_condition_index,
+            Capability::HidioUnicodeState {
+                loop_condition_index,
+                ..
+            } => *loop_condition_index,
+        }
+    }
+}
+
 /// CapabilityRun
 /// Used to run capabilities rather than map them out in a result guide
 #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
@@ -584,6 +780,38 @@ pub enum CapabilityRun {
     },
 }
 
+impl CapabilityRun {
+    pub fn state(&self) -> CapabilityEvent {
+        match self {
+            CapabilityRun::NoOp { state } => *state,
+            CapabilityRun::Rotate { state, .. } => *state,
+            CapabilityRun::LayerClear { state, .. } => *state,
+            CapabilityRun::LayerState { state, .. } => *state,
+            CapabilityRun::LayerRotate { state, .. } => *state,
+            CapabilityRun::HidProtocol { state, .. } => *state,
+            CapabilityRun::HidKeyboard { state, .. } => *state,
+            CapabilityRun::HidKeyboardState { state, .. } => *state,
+            CapabilityRun::HidConsumerControl { state, .. } => *state,
+            CapabilityRun::HidSystemControl { state, .. } => *state,
+            CapabilityRun::McuFlashMode { state, .. } => *state,
+            CapabilityRun::HidLed { state, .. } => *state,
+            CapabilityRun::PixelAnimationControl { state, .. } => *state,
+            CapabilityRun::PixelFadeControl { state, .. } => *state,
+            CapabilityRun::PixelFadeLayer { state, .. } => *state,
+            CapabilityRun::PixelFadeSet { state, .. } => *state,
+            CapabilityRun::PixelGammaControl { state, .. } => *state,
+            CapabilityRun::PixelLedControl { state, .. } => *state,
+            CapabilityRun::PixelTest { state, .. } => *state,
+            CapabilityRun::HidioOpenUrl { state, .. } => *state,
+            CapabilityRun::HidioUnicodeString { state, .. } => *state,
+            CapabilityRun::HidioUnicodeState { state, .. } => *state,
+            _ => {
+                panic!("CapabilityRun type not handled for state({:?})", self)
+            }
+        }
+    }
+}
+
 // Size validation for Capability
 // DO NOT CHANGE THIS: Will invalidate existing generated KLL layouts
 const_assert_eq!(core::mem::size_of::<Capability>(), 8);
@@ -615,7 +843,21 @@ impl Capability {
     }
 }
 
+pub enum Vote {
+    /// Successful comparison
+    Positive,
+    /// Negative comparison, should stop this and all future voting for this trigger guide
+    Negative,
+    /// No match, but doesn't exclude future comparisons (e.g. hold event)
+    Insufficient,
+    /// Indicate that this is an off state that need to be processed separately (or later)
+    OffState,
+}
+
 pub mod trigger {
+    use super::*;
+    use num_traits::FromPrimitive;
+
     /// PHRO - Press/Hold/Release/Off
     /// Generally used for momentary switches
     #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
@@ -629,6 +871,76 @@ pub mod trigger {
         /// Passthrough TriggerEvent state
         /// Only used for TriggerConditions
         Passthrough = 8,
+    }
+
+    impl Phro {
+        /// Given the previous state and current state determine the correct Phro state
+        pub fn from_state(prev_state: bool, cur_state: bool) -> Self {
+            // Off -> On
+            if !prev_state && cur_state {
+                Phro::Press
+            // On -> On
+            } else if prev_state && cur_state {
+                Phro::Hold
+            // On -> Off
+            } else if prev_state && !cur_state {
+                Phro::Release
+            // Off -> Off
+            } else {
+                Phro::Off
+            }
+        }
+
+        /// Compare states including time base
+        /// Used when comparing TriggerEvents to TriggerConditions and whether the event
+        /// satisfies the condition
+        pub fn compare(&self, cond_time: u32, event_state: Self, event_time: u32) -> Vote {
+            // Make sure states match
+            if *self != event_state {
+                // When the condition is an Off state and the event is not
+                // We need to return this status back so we can do a reverse lookup to retrieve
+                // any off state events
+                if *self == Phro::Off {
+                    return Vote::OffState;
+                } else {
+                    return Vote::Insufficient;
+                }
+            }
+
+            // Evaluate timing
+            match self {
+                Phro::Press => {
+                    if event_time >= cond_time {
+                        Vote::Positive
+                    } else {
+                        Vote::Negative
+                    }
+                }
+                Phro::Hold => {
+                    if event_time >= cond_time {
+                        Vote::Positive
+                    } else {
+                        Vote::Insufficient
+                    }
+                }
+                Phro::Release => {
+                    if event_time <= cond_time {
+                        Vote::Positive
+                    } else {
+                        Vote::Negative
+                    }
+                }
+                Phro::Off => {
+                    if event_time >= cond_time {
+                        Vote::Positive
+                    } else {
+                        Vote::Negative
+                    }
+                }
+                // Not enough information to determine a resolution
+                _ => Vote::Insufficient,
+            }
+        }
     }
 
     /// AODO - Activate/On/Deactivate/Off
@@ -646,6 +958,25 @@ pub mod trigger {
         Passthrough = 8,
     }
 
+    impl Aodo {
+        /// Given the previous state and current state determine the correct Aodo state
+        pub fn from_state(prev_state: bool, cur_state: bool) -> Self {
+            // Off -> On
+            if !prev_state && cur_state {
+                Aodo::Activate
+            // On -> On
+            } else if prev_state && cur_state {
+                Aodo::On
+            // On -> Off
+            } else if prev_state && !cur_state {
+                Aodo::Deactivate
+            // Off -> Off
+            } else {
+                Aodo::Off
+            }
+        }
+    }
+
     /// DRO - Done/Repeat/Off
     /// Generally used for an abstract process, such as an animation sequence.
     #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
@@ -661,7 +992,7 @@ pub mod trigger {
     }
 
     /// LayerState - AODO + Layer Info
-    #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+    #[derive(Copy, Clone, Debug, PartialEq, defmt::Format, Primitive)]
     #[repr(u8)]
     pub enum LayerState {
         ShiftActivate = 0x11,
@@ -699,6 +1030,13 @@ pub mod trigger {
         /// Passthrough TriggerEvent state
         /// Only used for TriggerConditions
         Passthrough = 0x08,
+    }
+
+    impl LayerState {
+        /// Mergers layer::State and Aodo for TriggerEvent::LayerState
+        pub fn from_layer(layer_state: layer::State, activity_state: Aodo) -> Self {
+            LayerState::from_u32(((layer_state as u32) << 1) | activity_state as u32).unwrap()
+        }
     }
 }
 
@@ -780,6 +1118,29 @@ pub enum TriggerEvent {
         /// Scanning loops since the last state change (can be 0 if the state just changed)
         last_state: u32,
     } = 13,
+}
+
+impl TriggerEvent {
+    /// Attempts to determine the index value of the event
+    /// If an index is not valid, return 0 instead (index may not have any meaning)
+    pub fn index(&self) -> u16 {
+        match self {
+            TriggerEvent::None => 0,
+            TriggerEvent::Switch { index, .. } => *index,
+            TriggerEvent::HidLed { index, .. } => (*index).into(),
+            TriggerEvent::AnalogDistance { index, .. } => *index,
+            TriggerEvent::AnalogVelocity { index, .. } => *index,
+            TriggerEvent::AnalogAcceleration { index, .. } => *index,
+            TriggerEvent::AnalogJerk { index, .. } => *index,
+            TriggerEvent::Layer { layer, .. } => (*layer).into(),
+            TriggerEvent::Animation { index, .. } => *index,
+            TriggerEvent::Sleep { .. } => 0,
+            TriggerEvent::Resume { .. } => 0,
+            TriggerEvent::Inactive { .. } => 0,
+            TriggerEvent::Active { .. } => 0,
+            TriggerEvent::Rotation { index, .. } => (*index).into(),
+        }
+    }
 }
 
 // Size validation for TriggerEvent
@@ -949,6 +1310,71 @@ impl TriggerCondition {
     pub const unsafe fn from_bytes(bytes: &[u8]) -> TriggerCondition {
         core::ptr::read(bytes.as_ptr() as *const &[u8] as *const TriggerCondition)
     }
+
+    /// Attempts to determine the index value of the condition
+    /// If an index is not valid, return 0 instead (index may not have any meaning)
+    pub fn index(&self) -> u16 {
+        match self {
+            TriggerCondition::None => 0,
+            TriggerCondition::Switch { index, .. } => *index,
+            TriggerCondition::HidLed { index, .. } => (*index).into(),
+            TriggerCondition::AnalogDistance { index, .. } => *index,
+            TriggerCondition::AnalogVelocity { index, .. } => *index,
+            TriggerCondition::AnalogAcceleration { index, .. } => *index,
+            TriggerCondition::AnalogJerk { index, .. } => *index,
+            TriggerCondition::Layer { layer, .. } => (*layer).into(),
+            TriggerCondition::Animation { index, .. } => *index,
+            TriggerCondition::Sleep { .. } => 0,
+            TriggerCondition::Resume { .. } => 0,
+            TriggerCondition::Inactive { .. } => 0,
+            TriggerCondition::Active { .. } => 0,
+            TriggerCondition::Rotation { index, .. } => (*index).into(),
+        }
+    }
+
+    /// Compare TriggerEvent to TriggerCondition
+    /// NOTE: This is not a direct equivalent comparison each type and state can influence
+    ///       how the loop_condition_index is evaluated.
+    ///       In a way, this is similar to the voting scheme of the older C KLL implementation.
+    pub fn evaluate(&self, event: TriggerEvent, loop_condition_lookup: &[u32]) -> Vote {
+        // Make sure the Id's match
+        if u8::from(*self) != u8::from(event) {
+            return Vote::Insufficient;
+        }
+
+        // Make sure the indices match
+        if self.index() != event.index() {
+            return Vote::Insufficient;
+        }
+
+        // We only need to compare like events as they must match
+        match self {
+            TriggerCondition::None => Vote::Positive,
+            TriggerCondition::Switch {
+                state,
+                loop_condition_index,
+                ..
+            } => {
+                if let TriggerEvent::Switch {
+                    state: e_state,
+                    last_state,
+                    ..
+                } = event
+                {
+                    state.compare(
+                        loop_condition_lookup[*loop_condition_index as usize],
+                        e_state,
+                        last_state,
+                    )
+                } else {
+                    Vote::Insufficient
+                }
+            }
+            _ => {
+                panic!("Unknown condition! Please fix.");
+            }
+        }
+    }
 }
 
 /// CapabilityState
@@ -970,6 +1396,19 @@ pub enum CapabilityState {
     Any = 3,
     /// Event passthrough
     Passthrough = 4,
+}
+
+impl CapabilityState {
+    /// Using a CapabilityState and TriggerEvent, generate a CapabilityEvent
+    pub fn event(&self, event: TriggerEvent) -> CapabilityEvent {
+        match self {
+            CapabilityState::None => CapabilityEvent::None,
+            CapabilityState::Initial => CapabilityEvent::Initial,
+            CapabilityState::Last => CapabilityEvent::Last,
+            CapabilityState::Any => CapabilityEvent::Any,
+            CapabilityState::Passthrough => CapabilityEvent::Passthrough(event),
+        }
+    }
 }
 
 /// CapabilityEvent

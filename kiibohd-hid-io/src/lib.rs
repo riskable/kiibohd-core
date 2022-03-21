@@ -178,8 +178,7 @@ impl<
     pub fn process_event(&mut self, event: HidIoEvent) -> Result<(), CommandError> {
         // TODO - Event handler
         match event {
-            HidIoEvent::TriggerEvent(_event) => {
-            }
+            HidIoEvent::TriggerEvent(_event) => {}
         }
         Ok(())
     }

@@ -9,10 +9,29 @@
 
 use crate::emitters::kllcore::KllCoreData;
 use crate::types::KllFile;
+use flexi_logger::Logger;
 use layouts_rs::Layouts;
+use log::*;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+
+enum LogError {
+    CouldNotStartLogger,
+}
+
+/// Lite logging setup
+fn setup_logging_lite() -> Result<(), LogError> {
+    match Logger::with_env_or_str("")
+        .format(flexi_logger::colored_default_format)
+        .format_for_files(flexi_logger::colored_detailed_format)
+        .duplicate_to_stderr(flexi_logger::Duplicate::All)
+        .start()
+    {
+        Err(_) => Err(LogError::CouldNotStartLogger),
+        Ok(_) => Ok(()),
+    }
+}
 
 #[test]
 fn trigger() {
@@ -102,18 +121,117 @@ fn trigger_result() {
 
 #[test]
 fn layer_lookup_simple() {
+    setup_logging_lite().ok();
+
     let test = fs::read_to_string("examples/kllcoretest.kll").unwrap();
     let result = KllFile::from_str(&test);
     let state = result.unwrap().into_struct();
     let mut layers = vec![state];
-    println!("THIS: {:?}", layers);
+    dbg!(layers.clone());
     let layouts = Layouts::from_dir(PathBuf::from("layouts"));
-    let _kdata = KllCoreData::new(&mut layers, layouts);
+    let kdata = KllCoreData::new(&mut layers, layouts);
 
-    // TODO Validate
+    // TODO - Generate loop conditions using compiler
+    let loop_condition_lookup: &[u32] = &[0];
+
     // Load data structures into kll-core
-    // Pipe valid input commands
-    // Verify command outputs
+    const LAYOUT_SIZE: usize = 2;
+    let lookup = kll_core::layout::LayerLookup::<LAYOUT_SIZE>::new(
+        &kdata.raw_layer_lookup,
+        &kdata.trigger_guides,
+        &kdata.result_guides,
+        &kdata.trigger_result_map,
+        &loop_condition_lookup,
+    );
+
+    // Initialize LayerState
+    const STATE_SIZE: usize = 2;
+    const MAX_LAYERS: usize = 2;
+    const MAX_ACTIVE_LAYERS: usize = 2;
+    const MAX_ACTIVE_TRIGGERS: usize = 2;
+    const MAX_LAYER_STACK_CACHE: usize = 2;
+    const MAX_OFF_STATE_LOOKUP: usize = 2;
+    let mut layer_state = kll_core::layout::LayerState::<
+        LAYOUT_SIZE,
+        STATE_SIZE,
+        MAX_LAYERS,
+        MAX_ACTIVE_LAYERS,
+        MAX_ACTIVE_TRIGGERS,
+        MAX_LAYER_STACK_CACHE,
+        MAX_OFF_STATE_LOOKUP,
+    >::new(lookup, 0);
+
+    // Generate Press event
+    let event = kll_core::TriggerEvent::Switch {
+        state: kll_core::trigger::Phro::Press,
+        index: 0x00,
+        last_state: 0,
+    };
+
+    // Process Press event
+    const LSIZE: usize = 4;
+    assert!(
+        layer_state.process_trigger::<LSIZE>(event).is_ok(),
+        "Failed to enqueue: {:?}",
+        event
+    );
+
+    // Confirm there are no off state lookups
+    assert_eq!(
+        layer_state.off_state_lookups().len(),
+        0,
+        "Unexpected off state lookups"
+    );
+
+    // Verify capability event
+    let cap_runs = layer_state.finalize_triggers::<LSIZE>();
+    trace!("cap_runs: {:?}", cap_runs);
+    assert_eq!(
+        cap_runs,
+        [kll_core::CapabilityRun::HidKeyboard {
+            state: kll_core::CapabilityEvent::Initial,
+            id: kll_core::kll_hid::Keyboard::Esc,
+        }],
+        "Unexpected press result {:?}",
+        cap_runs
+    );
+
+    // Next time iteration
+    layer_state.increment_time();
+
+    // Generate Release event
+    let event = kll_core::TriggerEvent::Switch {
+        state: kll_core::trigger::Phro::Release,
+        index: 0x00,
+        last_state: 0,
+    };
+
+    // Process Release event
+    assert!(
+        layer_state.process_trigger::<LSIZE>(event).is_ok(),
+        "Failed to enqueue: {:?}",
+        event
+    );
+
+    // Confirm there are no off state lookups
+    assert_eq!(
+        layer_state.off_state_lookups().len(),
+        0,
+        "Unexpected off state lookups"
+    );
+
+    // Verify capability event
+    let cap_runs = layer_state.finalize_triggers::<LSIZE>();
+    trace!("cap_runs: {:?}", cap_runs);
+    assert_eq!(
+        cap_runs,
+        [kll_core::CapabilityRun::HidKeyboard {
+            state: kll_core::CapabilityEvent::Last,
+            id: kll_core::kll_hid::Keyboard::Esc,
+        }],
+        "Unexpected release result {:?}",
+        cap_runs
+    );
 }
 
 #[test]
@@ -135,6 +253,10 @@ fn keystone_basemap_rust() {
     let mut layers = vec![state];
     let layouts = Layouts::from_dir(PathBuf::from("layouts"));
     let kdata = KllCoreData::new(&mut layers, layouts);
+
+    // TODO - Generate loop conditions using compiler
+    let loop_condition_lookup: &[u32] = &[0];
+
     dbg!(&kdata.trigger_guides);
     //dbg!(kdata.trigger_hash);
     //dbg!(kdata.trigger_result_hash);
@@ -145,6 +267,7 @@ fn keystone_basemap_rust() {
         &kdata.trigger_guides,
         &kdata.result_guides,
         &kdata.trigger_result_map,
+        &loop_condition_lookup,
     );
 
     for kset in lookup.layer_lookup().keys() {
