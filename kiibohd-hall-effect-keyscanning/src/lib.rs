@@ -1,4 +1,4 @@
-// Copyright 2021 Jacob Alexander
+// Copyright 2021-2022 Jacob Alexander
 //
 // Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
 // http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
@@ -19,7 +19,8 @@ use kiibohd_hall_effect::{SenseAnalysis, SensorError, Sensors};
 /// const CSIZE: usize = 18; // Number of columns
 /// const RSIZE: usize = 6; // Number of rows
 /// const MSIZE: usize = RSIZE * CSIZE; // Total matrix size
-/// type Matrix = kiibohd_hall_effect_keyscanning::Matrix<PioX<Output<PushPull>>, CSIZE, MSIZE>; // atsam4-hal
+/// const INVERT_STROBE: bool = true; // P-Channel MOSFETs have an inverted strobe
+/// type Matrix = kiibohd_hall_effect_keyscanning::Matrix<PioX<Output<PushPull>>, CSIZE, MSIZE, INVERT_STROBE>; // atsam4-hal
 /// let cols = [
 ///     pins.strobe1.downgrade(),
 ///     pins.strobe2.downgrade(),
@@ -42,13 +43,15 @@ use kiibohd_hall_effect::{SenseAnalysis, SensorError, Sensors};
 /// ];
 /// let mut matrix = Matrix::new(cols).unwrap();
 /// ```
-pub struct Matrix<C: OutputPin, const CSIZE: usize, const MSIZE: usize> {
+pub struct Matrix<C: OutputPin, const CSIZE: usize, const MSIZE: usize, const INVERT_STROBE: bool> {
     cols: [C; CSIZE],
     cur_strobe: usize,
     sensors: Sensors<MSIZE>,
 }
 
-impl<C: OutputPin, const CSIZE: usize, const MSIZE: usize> Matrix<C, CSIZE, MSIZE> {
+impl<C: OutputPin, const CSIZE: usize, const MSIZE: usize, const INVERT_STROBE: bool>
+    Matrix<C, CSIZE, MSIZE, INVERT_STROBE>
+{
     pub fn new(cols: [C; CSIZE]) -> Result<Self, SensorError> {
         let sensors = Sensors::new()?;
         let res = Self {
@@ -67,7 +70,11 @@ impl<C: OutputPin, const CSIZE: usize, const MSIZE: usize> Matrix<C, CSIZE, MSIZ
     {
         // Clear strobes
         for c in self.cols.iter_mut() {
-            c.set_low()?;
+            if INVERT_STROBE {
+                c.set_high()?;
+            } else {
+                c.set_low()?;
+            }
         }
         // Reset strobe position
         self.cur_strobe = CSIZE - 1;
@@ -80,7 +87,11 @@ impl<C: OutputPin, const CSIZE: usize, const MSIZE: usize> Matrix<C, CSIZE, MSIZ
         C: OutputPin<Error = E>,
     {
         // Unset current strobe
-        self.cols[self.cur_strobe].set_low()?;
+        if INVERT_STROBE {
+            self.cols[self.cur_strobe].set_high()?;
+        } else {
+            self.cols[self.cur_strobe].set_low()?;
+        }
 
         // Check for roll-over condition
         if self.cur_strobe >= CSIZE - 1 {
@@ -90,7 +101,11 @@ impl<C: OutputPin, const CSIZE: usize, const MSIZE: usize> Matrix<C, CSIZE, MSIZ
         }
 
         // Set new strobe
-        self.cols[self.cur_strobe].set_high()?;
+        if INVERT_STROBE {
+            self.cols[self.cur_strobe].set_low()?;
+        } else {
+            self.cols[self.cur_strobe].set_high()?;
+        }
 
         Ok(self.cur_strobe)
     }
