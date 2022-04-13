@@ -1,4 +1,4 @@
-// Copyright 2021 Jacob Alexander
+// Copyright 2021-2022 Jacob Alexander
 //
 // Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
 // http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
@@ -8,14 +8,13 @@
 // ----- Modules -----
 
 #![no_std]
-// TODO(haata): Remove this once clippy bug is fixed (likely mid-Nov 2021)
-#![allow(clippy::question_mark)]
 
 // ----- Crates -----
 
 use heapless::{String, Vec};
 pub use hid_io_protocol::commands::*;
 pub use hid_io_protocol::*;
+use kll_core::TriggerEvent;
 use pkg_version::*;
 
 // ----- Sizes -----
@@ -31,6 +30,12 @@ pub struct HidIoHostInfo {
     pub os: u8,
     pub os_version: String<256>,
     pub host_software_name: String<256>,
+}
+
+// ----- Enums -----
+
+pub enum HidIoEvent {
+    TriggerEvent(TriggerEvent),
 }
 
 // ----- Command Interface -----
@@ -164,6 +169,17 @@ impl<
             let output = self.term_out_buffer.clone();
             self.h0034_terminalout(h0034::Cmd { output }, true)?;
             self.term_out_buffer.clear();
+        }
+        Ok(())
+    }
+
+    /// Process incoming events through HID-IO
+    /// This is the preferred mechanism to interact with HID-IO (if possible for your situation)
+    pub fn process_event(&mut self, event: HidIoEvent) -> Result<(), CommandError> {
+        // TODO - Event handler
+        match event {
+            HidIoEvent::TriggerEvent(_event) => {
+            }
         }
         Ok(())
     }
