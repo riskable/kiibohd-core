@@ -12,7 +12,7 @@ use crate::types::KllFile;
 use flexi_logger::Logger;
 use layouts_rs::Layouts;
 use log::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 
@@ -170,11 +170,8 @@ fn layer_lookup_simple() {
 
     // Process Press event
     const LSIZE: usize = 4;
-    assert!(
-        layer_state.process_trigger::<LSIZE>(event).is_ok(),
-        "Failed to enqueue: {:?}",
-        event
-    );
+    let ret = layer_state.process_trigger::<LSIZE>(event);
+    assert!(ret.is_ok(), "Failed to enqueue: {:?} - {:?}", event, ret);
 
     // Confirm there are no off state lookups
     assert_eq!(
@@ -247,22 +244,22 @@ fn generate_rust() {
 
 #[test]
 fn keystone_basemap_rust() {
+    setup_logging_lite().ok();
+
     let test = fs::read_to_string("examples/keystone_scancode_map.kll").unwrap();
     let result = KllFile::from_str(&test);
     let state = result.unwrap().into_struct();
     let mut layers = vec![state];
+    dbg!(layers.clone());
     let layouts = Layouts::from_dir(PathBuf::from("layouts"));
-    let kdata = KllCoreData::new(&mut layers, layouts);
+    let kdata = KllCoreData::new(&mut layers, layouts.clone());
 
     // TODO - Generate loop conditions using compiler
     let loop_condition_lookup: &[u32] = &[0];
 
-    dbg!(&kdata.trigger_guides);
-    //dbg!(kdata.trigger_hash);
-    //dbg!(kdata.trigger_result_hash);
-
     // Parse trigger_guides to use as all possible kll inputs
-    let lookup = kll_core::layout::LayerLookup::<256>::new(
+    const LAYOUT_SIZE: usize = 128;
+    let lookup = kll_core::layout::LayerLookup::<LAYOUT_SIZE>::new(
         &kdata.raw_layer_lookup,
         &kdata.trigger_guides,
         &kdata.result_guides,
@@ -270,8 +267,134 @@ fn keystone_basemap_rust() {
         &loop_condition_lookup,
     );
 
-    for kset in lookup.layer_lookup().keys() {
-        dbg!(lookup.trigger_list(*kset));
-        dbg!(lookup.lookup_guides::<10>(*kset));
+    // Initialize LayerState
+    const STATE_SIZE: usize = 256;
+    const MAX_LAYERS: usize = 2;
+    const MAX_ACTIVE_LAYERS: usize = 2;
+    const MAX_ACTIVE_TRIGGERS: usize = 2;
+    const MAX_LAYER_STACK_CACHE: usize = 2;
+    const MAX_OFF_STATE_LOOKUP: usize = 2;
+    let mut layer_state = kll_core::layout::LayerState::<
+        LAYOUT_SIZE,
+        STATE_SIZE,
+        MAX_LAYERS,
+        MAX_ACTIVE_LAYERS,
+        MAX_ACTIVE_TRIGGERS,
+        MAX_LAYER_STACK_CACHE,
+        MAX_OFF_STATE_LOOKUP,
+    >::new(lookup, 0);
+
+    // TODO Need to parameterize this section (make it part of kllcore emitter for general use)
+    for (index, layer) in layers.iter().enumerate() {
+        for mapping in &layer.keymap {
+            trace!("Layer: {:?} -> {:?}", index, mapping);
+
+            // Convert triggers to events and process them
+            // TODO Handle combos and sequences
+            const LSIZE: usize = 4;
+            for combo in &mapping.0 .0 {
+                // Make sure we can satisfy the timing requirement
+                let mut ready = false;
+                while !ready {
+                    for elem in combo {
+                        if let Some(state) = &elem.state {
+                            if state.states[0].time.is_none() {
+                                ready = true;
+                                break;
+                            } else {
+                                panic!("time states not handled yet: {:?}", elem);
+                            }
+                        } else {
+                            ready = true;
+                            break;
+                        }
+                    }
+                }
+
+                // Convert each Trigger to a TriggerEvent
+                for elem in combo {
+                    trace!("t elem: {:?}", elem);
+
+                    // Convert to TriggerCondition
+                    let cond = elem.kll_core_condition();
+                    trace!("t cond: {:?}", cond);
+
+                    // Convert to TriggerEvent
+                    let event: kll_core::TriggerEvent = cond.into();
+                    trace!("t event: {:?}", event);
+
+                    // Process event
+                    let ret = layer_state.process_trigger::<LSIZE>(event);
+                    assert!(ret.is_ok(), "Failed to enqueue: {:?} - {:?}", event, ret);
+                }
+
+                // Handle off state lookups
+                // TODO
+                //layer_state.off_state_lookups()
+
+                // TODO Increment time for sequences, but only for sequences
+            }
+
+            // Convert results to capability runs
+            for combo in &mapping.2 .0 {
+                // Wait for the first combo element (timing requirements)
+                let mut ready = false;
+                while !ready {
+                    for elem in combo {
+                        if let Some(state) = &elem.state {
+                            if state.states[0].time.is_none() {
+                                ready = true;
+                                break;
+                            } else {
+                                panic!("time states not handled yet: {:?}", elem);
+                            }
+                        } else {
+                            ready = true;
+                            break;
+                        }
+                    }
+                }
+
+                // Retrieve CapabilityRun results
+                let cap_runs = layer_state.finalize_triggers::<LSIZE>();
+                let mut cap_runs_set: HashSet<kll_core::CapabilityRun> =
+                    cap_runs.into_iter().collect();
+
+                // We need to confirm that the resulting actions
+                // are the same as what was recorded in the ResultGuide
+                // This means we need to handle timing as well.
+                // XXX: Currently make the assumption that all items in a
+                //      combo run at the same time. The kll-compiler should
+                //      group the combos accordingly.
+                for elem in combo {
+                    trace!("r elem: {:?}", elem);
+
+                    // Convert to Capability
+                    let cap = elem.kll_core_condition(layouts.clone());
+                    trace!("r cap: {:?}", cap);
+
+                    // Convert to CapabilityRun
+                    let cap_run: kll_core::CapabilityRun = cap.into();
+                    trace!("r cap_run: {:?}", cap_run);
+
+                    // Attempt to verify by removing from cap_runs_set
+                    assert!(
+                        cap_runs_set.remove(&cap_run),
+                        "Failed to remove {:?}",
+                        cap_run
+                    );
+                }
+
+                // Make sure set is empty
+                assert!(
+                    cap_runs_set.is_empty(),
+                    "Failed to remove all entries: {:?}",
+                    cap_runs_set
+                );
+            }
+
+            // Next time iteration
+            layer_state.increment_time();
+        }
     }
 }

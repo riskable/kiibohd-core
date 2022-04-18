@@ -23,7 +23,7 @@ pub mod macros;
 pub use kll_hid;
 
 pub mod hid {
-    #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
     #[repr(u8)]
     pub enum Protocol {
         /// HID boot mode protocol
@@ -34,7 +34,7 @@ pub mod hid {
         Toggle = 3,
     }
 
-    #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
     #[repr(u8)]
     pub enum State {
         /// Control is enabled / pressed
@@ -48,7 +48,7 @@ pub mod layer {
     use core::ops::{BitAnd, BitAndAssign, BitOrAssign, Not};
     use num_traits::FromPrimitive;
 
-    #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
     #[repr(u8)]
     pub enum Direction {
         /// Next layer
@@ -57,7 +57,7 @@ pub mod layer {
         Previous = 1,
     }
 
-    #[derive(Copy, Clone, Debug, PartialEq, defmt::Format, Primitive)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format, Primitive)]
     #[repr(u8)]
     pub enum State {
         /// No layer state
@@ -152,7 +152,7 @@ pub mod layer {
 }
 
 pub mod pixel {
-    #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
     #[repr(u8)]
     pub enum GammaControl {
         /// Disable gamma correction
@@ -163,7 +163,7 @@ pub mod pixel {
         Toggle = 3,
     }
 
-    #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
     #[repr(u8)]
     pub enum AnimationControl {
         /// Toggles between pause/resume
@@ -185,7 +185,7 @@ pub mod pixel {
         Clear = 7,
     }
 
-    #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
     #[repr(u8)]
     pub enum FadeCommand {
         /// Resets fade settings to default
@@ -202,7 +202,7 @@ pub mod pixel {
         BrightnessDefault = 5,
     }
 
-    #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
     #[repr(u8)]
     pub enum PixelTest {
         /// Disable pixel test mode
@@ -236,7 +236,7 @@ pub mod pixel {
         PositionAllOn = 24,
     }
 
-    #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
     #[repr(u8)]
     pub enum LedControl {
         /// Decrease LED brightness
@@ -269,7 +269,7 @@ pub mod pixel {
 ///       At worst, KLL file and compiler definitions may also need to be updated.
 ///       Please avoid these kinds of changes if possible.
 ///       Adding new entries is safe.
-#[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
 #[repr(u8)]
 pub enum Capability {
     /// No-op / None action
@@ -633,7 +633,7 @@ impl Capability {
 
 /// CapabilityRun
 /// Used to run capabilities rather than map them out in a result guide
-#[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
 #[repr(u8)]
 pub enum CapabilityRun {
     /// No-op / None action
@@ -860,7 +860,7 @@ pub mod trigger {
 
     /// PHRO - Press/Hold/Release/Off
     /// Generally used for momentary switches
-    #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
     #[repr(u8)]
     pub enum Phro {
         Press = 1,
@@ -945,7 +945,7 @@ pub mod trigger {
 
     /// AODO - Activate/On/Deactivate/Off
     /// Generally used for maintained switches
-    #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
     #[repr(u8)]
     pub enum Aodo {
         Activate = 1,
@@ -979,7 +979,7 @@ pub mod trigger {
 
     /// DRO - Done/Repeat/Off
     /// Generally used for an abstract process, such as an animation sequence.
-    #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
     #[repr(u8)]
     pub enum Dro {
         Off = 0,
@@ -992,7 +992,7 @@ pub mod trigger {
     }
 
     /// LayerState - AODO + Layer Info
-    #[derive(Copy, Clone, Debug, PartialEq, defmt::Format, Primitive)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format, Primitive)]
     #[repr(u8)]
     pub enum LayerState {
         ShiftActivate = 0x11,
@@ -1044,7 +1044,7 @@ pub mod trigger {
 ///
 /// last_state is an incrementing counter that increases on every scan loop while the state has not
 /// changed (e.g. holding a key).
-#[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
 #[repr(u8)]
 pub enum TriggerEvent {
     None = 0,
@@ -1153,7 +1153,7 @@ const_assert_eq!(core::mem::size_of::<TriggerEvent>(), 8);
 ///              if done correctly. Static assertions are included to prevent bad mistakes.
 ///              Changing the enum size is an API breaking change (requires KLL compiler
 ///              updates).
-#[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
 #[repr(u8)]
 pub enum TriggerCondition {
     None = 0,
@@ -1383,7 +1383,7 @@ impl TriggerCondition {
 /// This mirrors CapabilityEvent, except that the Passthrough event is not stored as it is not
 /// known at compile time.
 /// If passthrough has been specified the final element of the last combo will be sent instead
-#[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
 #[repr(u8)]
 pub enum CapabilityState {
     /// Invalid, ignore this event
@@ -1417,7 +1417,7 @@ impl CapabilityState {
 /// Mirrors CapabilityState, except that Passthrough contains the TriggerEvent to pass through
 /// to the corresponding Capability (see ResultGuide).
 /// If passthrough has been specified the final element of the last combo will be sent instead
-#[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
 #[repr(u8)]
 pub enum CapabilityEvent {
     /// Invalid, ignore this event

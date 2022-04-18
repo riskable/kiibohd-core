@@ -1,4 +1,4 @@
-// Copyright 2021 Jacob Alexander
+// Copyright 2021-2022 Jacob Alexander
 //
 // Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
 // http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
@@ -11,7 +11,7 @@
 /// Locales defined by the USB HID Spec v1.11
 /// <http://www.usb.org/developers/hidpage/HID1_11.pdf> (6.2.1) HID Descriptor
 /// 36-255 are reserved
-#[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
 #[repr(u8)]
 pub enum Locale {
     Undefined = 0,
@@ -57,7 +57,7 @@ pub enum Locale {
 /// 0xA5 to 0xAF are reserved
 /// 0xDE to 0xDF are reserved
 /// 0xE8 to 0xFF are reserved
-#[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
 #[repr(u8)]
 pub enum Keyboard {
     NoEvent = 0x00,
@@ -317,7 +317,7 @@ impl From<LedIndicator> for u8 {
 
 /// HID LED Indicators
 /// List of LED codes - USB HID 1.12v2 pg 61
-#[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
 #[repr(u8)]
 pub enum LedIndicator {
     Undefined = 0x00,
@@ -390,7 +390,7 @@ pub enum LedIndicator {
 /// 0x94 - 0x9F Reserved
 /// 0xA9 - 0xAF Reserved
 /// 0xB8 - 0xFFFF Reserved
-#[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
 #[repr(u8)]
 pub enum SystemControl {
     PowerDown = 0x81,
@@ -457,7 +457,7 @@ pub enum SystemControl {
 /// Application Launch Buttons pg 79
 /// Generic GUI Application Controls pg 82
 /// TODO: Where does 0x29D come from?
-#[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
 #[repr(u16)]
 pub enum ConsumerControl {
     _10 = 0x020,

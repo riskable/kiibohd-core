@@ -457,7 +457,7 @@ impl<'a> Trigger<'a> {
     /// controller firmware did.
     /// TODO ^ Use a kll-compiler function to automatically duplicate so we don't have to do it
     /// here.
-    fn kll_core_condition(&self) -> kll_core::TriggerCondition {
+    pub fn kll_core_condition(&self) -> kll_core::TriggerCondition {
         // State must be defined
         // generate_state_scheduling() function can be used to compute if
         // it's not defined.
@@ -792,7 +792,7 @@ pub struct Action<'a> {
 
 impl<'a> Action<'a> {
     /// Converts to a kll-core Capability definition
-    fn kll_core_condition(&self, mut layouts: Layouts) -> kll_core::Capability {
+    pub fn kll_core_condition(&self, mut layouts: Layouts) -> kll_core::Capability {
         // State must be defined
         // generate_state_scheduling() function can be used to compute if
         // it's not defined.

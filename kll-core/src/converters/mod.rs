@@ -13,7 +13,7 @@ mod switch;
 
 mod convert {
     use crate::converters::{animation, layer, led, rotation, switch};
-    use crate::{CapabilityEvent, CapabilityRun, TriggerCondition, TriggerEvent};
+    use crate::{Capability, CapabilityEvent, CapabilityRun, TriggerCondition, TriggerEvent};
 
     impl From<TriggerEvent> for CapabilityRun {
         fn from(event: TriggerEvent) -> Self {
@@ -81,6 +81,48 @@ mod convert {
                 TriggerCondition::Inactive { .. } => 11,
                 TriggerCondition::Active { .. } => 12,
                 TriggerCondition::Rotation { .. } => 13,
+            }
+        }
+    }
+
+    /// Convert TriggerCondition to TriggerEvent
+    /// Used for mainly for kll validation, events are time index 0
+    /// and are assumed to be immediate with no history
+    impl From<TriggerCondition> for TriggerEvent {
+        fn from(cond: TriggerCondition) -> Self {
+            match cond {
+                TriggerCondition::None => TriggerEvent::None,
+                TriggerCondition::Switch { state, index, .. } => TriggerEvent::Switch {
+                    state,
+                    index,
+                    last_state: 0,
+                },
+                _ => {
+                    panic!(
+                        "TriggerCondition to TriggerEvent not implemented! {:?}",
+                        cond
+                    );
+                }
+            }
+        }
+    }
+
+    /// Convert Capability to CapabilityRun
+    /// Used for mainly for kll validation
+    impl From<Capability> for CapabilityRun {
+        fn from(cap: Capability) -> Self {
+            let tevent = TriggerEvent::None;
+            match cap {
+                Capability::NoOp { state, .. } => CapabilityRun::NoOp {
+                    state: state.event(tevent),
+                },
+                Capability::HidKeyboard { state, id, .. } => CapabilityRun::HidKeyboard {
+                    state: state.event(tevent),
+                    id,
+                },
+                _ => {
+                    panic!("Capability to CapabilityRun not implemented! {:?}", cap);
+                }
             }
         }
     }

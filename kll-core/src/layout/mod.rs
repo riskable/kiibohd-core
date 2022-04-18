@@ -645,8 +645,8 @@ impl<'a, const LAYOUT_SIZE: usize> LayerLookup<'a, LAYOUT_SIZE> {
                             }
                             Err(e) => {
                                 error!(
-                                    "Failed to add lookup key ({}, {}) -> {}: {:?}",
-                                    layer, index, lookup, e
+                                    "Failed to add lookup key ({}, {}) -> {}: {:?}; Size:{:?} Capacity:{:?}",
+                                    layer, index, lookup, e, layer_lookup.len(), LAYOUT_SIZE,
                                 );
                             }
                         }
