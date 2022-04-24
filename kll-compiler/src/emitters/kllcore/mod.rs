@@ -194,7 +194,7 @@ pub const TRIGGER_GUIDES: &[u8] = &[{}];
 pub const RESULT_GUIDES: &[u8] = &[{}];
 
 /// Trigger:Result Mapping
-pub const TRIGGER_RESULT_MAPPING: &[u8] = &[{}];
+pub const TRIGGER_RESULT_MAPPING: &[u16] = &[{}];
 
 /// Raw Layer Lookup Table
 pub const LAYER_LOOKUP: &[u8] = &[{}];
