@@ -578,6 +578,7 @@ impl<
 /// In most cases a (layer, ttype, index) tuple is provided and a list of TriggerGuide:ResultGuide
 /// mappings
 /// is provided. See lookup_guides().
+#[derive(Clone, Debug, PartialEq)]
 pub struct LayerLookup<'a, const LAYOUT_SIZE: usize> {
     layer_lookup: FnvIndexMap<(u8, u8, u16), usize, LAYOUT_SIZE>,
     raw_layer_lookup: &'a [u8],
