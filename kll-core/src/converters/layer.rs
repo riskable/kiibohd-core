@@ -7,6 +7,7 @@
 
 use crate::layer::State;
 use crate::trigger::LayerState;
+use crate::{error, warn};
 use crate::{CapabilityEvent, CapabilityRun, TriggerEvent};
 
 /// Converts the passed `TriggerEvent` into a `CapabilityRun::LayerState`
@@ -161,14 +162,14 @@ pub(super) fn convert(event: TriggerEvent) -> CapabilityRun {
                 layer_state: State::ShiftLatchLock,
             },
             _ => {
-                log::warn!("Unexpected state {:?}", state);
+                warn!("Unexpected state {:?}", state);
                 CapabilityRun::NoOp {
                     state: CapabilityEvent::None,
                 }
             }
         }
     } else {
-        log::error!("Unexpected event {:?}", event);
+        error!("Unexpected event {:?}", event);
         CapabilityRun::NoOp {
             state: CapabilityEvent::None,
         }

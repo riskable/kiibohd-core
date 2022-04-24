@@ -12,7 +12,6 @@ mod test;
 use super::*;
 use core::cmp::Ordering;
 use heapless::{FnvIndexMap, Vec};
-use log::*;
 
 // ----- Enums -----
 

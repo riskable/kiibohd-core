@@ -1,10 +1,11 @@
-// Copyright 2021 Jacob Alexander
+// Copyright 2021-2022 Jacob Alexander
 //
 // Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
 // http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::error;
 use crate::{CapabilityEvent, CapabilityRun, TriggerEvent};
 
 /// Converts the passed TriggerEvent into a CapabilityRun::Rotate
@@ -26,7 +27,7 @@ pub(super) fn convert(event: TriggerEvent) -> CapabilityRun {
             increment: position,
         }
     } else {
-        log::error!("Unexpected event {:?}", event);
+        error!("Unexpected event {:?}", event);
         CapabilityRun::NoOp {
             state: CapabilityEvent::None,
         }

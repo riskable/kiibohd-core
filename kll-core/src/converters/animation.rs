@@ -6,6 +6,7 @@
 // copied, modified, or distributed except according to those terms.
 
 use crate::trigger::Dro;
+use crate::{error, warn};
 use crate::{CapabilityEvent, CapabilityRun, TriggerEvent};
 
 /// Converts the passed `TriggerEvent` into a `CapabilityRun::PixelAnimationIndex`
@@ -32,14 +33,14 @@ pub(super) fn convert(event: TriggerEvent) -> CapabilityRun {
                 index,
             },
             _ => {
-                log::warn!("Unexpected state {:?}", state);
+                warn!("Unexpected state {:?}", state);
                 CapabilityRun::NoOp {
                     state: CapabilityEvent::None,
                 }
             }
         }
     } else {
-        log::error!("Unexpected event {:?}", event);
+        error!("Unexpected event {:?}", event);
         CapabilityRun::NoOp {
             state: CapabilityEvent::None,
         }

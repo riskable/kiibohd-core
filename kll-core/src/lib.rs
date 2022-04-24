@@ -22,6 +22,25 @@ pub mod layout;
 pub mod macros;
 pub use kll_hid;
 
+#[cfg(any(
+    feature = "defmt-default",
+    feature = "defmt-trace",
+    feature = "defmt-debug",
+    feature = "defmt-info",
+    feature = "defmt-warn",
+    feature = "defmt-error"
+))]
+use defmt::{error, trace, warn};
+#[cfg(not(any(
+    feature = "defmt-default",
+    feature = "defmt-trace",
+    feature = "defmt-debug",
+    feature = "defmt-info",
+    feature = "defmt-warn",
+    feature = "defmt-error"
+)))]
+use log::{error, trace, warn};
+
 pub mod hid {
     #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, defmt::Format)]
     #[repr(u8)]

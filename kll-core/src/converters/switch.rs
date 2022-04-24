@@ -1,4 +1,4 @@
-// Copyright 2021 Jacob Alexander
+// Copyright 2021-2022 Jacob Alexander
 //
 // Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
 // http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
@@ -6,6 +6,7 @@
 // copied, modified, or distributed except according to those terms.
 
 use crate::trigger::Phro;
+use crate::{error, warn};
 use crate::{CapabilityEvent, CapabilityRun, TriggerEvent};
 
 /// Converts the passed `TriggerEvent` into a `CapabilityRun::HidKeyboard`
@@ -37,14 +38,14 @@ pub(super) fn convert(event: TriggerEvent) -> CapabilityRun {
                 id: key,
             },
             _ => {
-                log::warn!("Unexpected state {:?}", state);
+                warn!("Unexpected state {:?}", state);
                 CapabilityRun::NoOp {
                     state: CapabilityEvent::None,
                 }
             }
         }
     } else {
-        log::error!("Unexpected event {:?}", event);
+        error!("Unexpected event {:?}", event);
         CapabilityRun::NoOp {
             state: CapabilityEvent::None,
         }
