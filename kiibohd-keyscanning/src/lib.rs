@@ -238,3 +238,44 @@ impl<
         self.state_matrix[index]
     }
 }
+
+#[cfg(feature = "kll-core")]
+mod converters {
+    use crate::KeyEvent;
+
+    impl KeyEvent {
+        pub fn trigger_event(&self, index: usize) -> kll_core::TriggerEvent {
+            match self {
+                KeyEvent::On {
+                    cycles_since_state_change,
+                } => {
+                    if *cycles_since_state_change == 0 {
+                        defmt::trace!("Reading: {} {}", index, self);
+                        kll_core::TriggerEvent::Switch {
+                            state: kll_core::trigger::Phro::Press,
+                            index: index as u16,
+                            last_state: 0,
+                        }
+                    } else {
+                        kll_core::TriggerEvent::None
+                    }
+                }
+                KeyEvent::Off {
+                    idle: _,
+                    cycles_since_state_change,
+                } => {
+                    if *cycles_since_state_change == 0 {
+                        defmt::trace!("Reading: {} {}", index, self);
+                        kll_core::TriggerEvent::Switch {
+                            state: kll_core::trigger::Phro::Release,
+                            index: index as u16,
+                            last_state: 0,
+                        }
+                    } else {
+                        kll_core::TriggerEvent::None
+                    }
+                }
+            }
+        }
+    }
+}
