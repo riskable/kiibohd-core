@@ -232,4 +232,9 @@ impl<
 
         Ok((res, self.cur_strobe))
     }
+
+    /// Return the KeyState for a given index
+    pub fn state(&self, index: usize) -> KeyState<CSIZE, SCAN_PERIOD_US, DEBOUNCE_US, IDLE_MS> {
+        self.state_matrix[index]
+    }
 }
