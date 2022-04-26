@@ -1,4 +1,4 @@
-// Copyright 2021 Jacob Alexander
+// Copyright 2021-2022 Jacob Alexander
 //
 // Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
 // http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
@@ -22,6 +22,9 @@ use usbd_hid::hid_class::{HIDClass, HidClassSettings, HidProtocol, HidSubClass};
 pub use usbd_hid::hid_class::{HidCountryCode, HidProtocolMode, ProtocolModeConfig};
 use usbd_hid::UsbError;
 
+#[cfg(feature = "kll-core")]
+use heapless::spsc::Producer;
+
 #[cfg(feature = "hidio")]
 use heapless::Vec;
 #[cfg(feature = "hidio")]
@@ -35,6 +38,8 @@ pub enum KeyState {
     Release(u8),
     /// Clear all currently pressed USB HID Keyboard codes
     Clear,
+    /// Unknown state, used for errors
+    Unknown,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
@@ -51,6 +56,8 @@ pub enum MouseState {
     HorzWheel(i8),
     /// Clear all mouse state
     Clear,
+    /// Unknown state, used for errors
+    Unknown,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
@@ -65,6 +72,8 @@ pub enum CtrlState {
     ConsumerCtrlRelease(u16),
     /// Clear all the currently pressed consumer and system control HID codes
     Clear,
+    /// Unknown state, used for errors
+    Unknown,
 }
 
 /// USB HID Combination Interface
@@ -415,6 +424,7 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
                             // - NKRO -
                             self.kbd_nkro_report.keybitmap = [0; 29];
                         }
+                        KeyState::Unknown => {}
                     }
                 }
                 None => {
@@ -480,6 +490,7 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
                 MouseState::Clear => {
                     self.mouse_report.buttons = 0;
                 }
+                MouseState::Unknown => {}
             }
         }
 
@@ -520,6 +531,7 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
                     self.ctrl_report.consumer_ctrl = 0;
                     self.ctrl_report.system_ctrl = 0;
                 }
+                CtrlState::Unknown => {}
             }
         }
 
@@ -623,4 +635,76 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
             }
         }
     }
+}
+
+#[cfg(feature = "kll-core")]
+pub fn enqueue_keyboard_event<const KBD_SIZE: usize>(
+    cap_run: kll_core::CapabilityRun,
+    kbd_producer: &mut Producer<KeyState, KBD_SIZE>,
+) -> Result<(), KeyState> {
+    match cap_run {
+        kll_core::CapabilityRun::HidKeyboard { state, id } => match state {
+            kll_core::CapabilityEvent::Initial => kbd_producer.enqueue(KeyState::Press(id as u8)),
+            kll_core::CapabilityEvent::Last => kbd_producer.enqueue(KeyState::Release(id as u8)),
+            _ => Ok(()),
+        },
+        kll_core::CapabilityRun::HidKeyboardState {
+            state,
+            id,
+            key_state,
+        } => match state {
+            kll_core::CapabilityEvent::Initial => kbd_producer.enqueue(match key_state {
+                kll_core::hid::State::Active => KeyState::Press(id as u8),
+                kll_core::hid::State::Inactive => KeyState::Release(id as u8),
+            }),
+            _ => Ok(()),
+        },
+        _ => {
+            defmt::error!("Unknown CapabilityRun for Keyboard: {:?}", cap_run);
+            Err(KeyState::Unknown)
+        }
+    }
+}
+
+#[cfg(feature = "kll-core")]
+pub fn enqueue_ctrl_event<const CTRL_SIZE: usize>(
+    cap_run: kll_core::CapabilityRun,
+    ctrl_producer: &mut Producer<CtrlState, CTRL_SIZE>,
+) -> Result<(), CtrlState> {
+    match cap_run {
+        kll_core::CapabilityRun::HidConsumerControl { state, id } => match state {
+            kll_core::CapabilityEvent::Initial => {
+                ctrl_producer.enqueue(CtrlState::ConsumerCtrlPress(id as u16))
+            }
+            kll_core::CapabilityEvent::Last => {
+                ctrl_producer.enqueue(CtrlState::ConsumerCtrlRelease(id as u16))
+            }
+            _ => Ok(()),
+        },
+        kll_core::CapabilityRun::HidSystemControl { state, id } => match state {
+            kll_core::CapabilityEvent::Initial => {
+                ctrl_producer.enqueue(CtrlState::SystemCtrlPress(id as u8))
+            }
+            kll_core::CapabilityEvent::Last => {
+                ctrl_producer.enqueue(CtrlState::SystemCtrlRelease(id as u8))
+            }
+            _ => Ok(()),
+        },
+        _ => {
+            defmt::error!(
+                "Unknown CapabilityRun for Consumer/System Control: {:?}",
+                cap_run
+            );
+            Err(CtrlState::Unknown)
+        }
+    }
+}
+
+#[cfg(feature = "kll-core")]
+pub fn enqueue_mouse_event<const MOUSE_SIZE: usize>(
+    _cap_run: kll_core::CapabilityRun,
+    _mouse_producer: &mut Producer<MouseState, MOUSE_SIZE>,
+) -> Result<(), MouseState> {
+    // TODO
+    Err(MouseState::Unknown)
 }
