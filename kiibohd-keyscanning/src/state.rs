@@ -164,6 +164,18 @@ impl<const CSIZE: usize, const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, cons
     pub fn state(&self) -> (State, bool, u32) {
         (self.state, self.idle, self.cycles_since_state_change)
     }
+
+    /// Number of cycles since the last state change
+    /// 0 when the state first changes
+    pub fn cycles_since_state_change(&self) -> u32 {
+        self.cycles_since_state_change
+    }
+
+    /// True if the switch is idle
+    /// idle indicates the switch is off and there have been no events
+    pub fn idle(&self) -> bool {
+        self.idle
+    }
 }
 
 impl<const CSIZE: usize, const SCAN_PERIOD_US: u32, const DEBOUNCE_US: u32, const IDLE_MS: u32>

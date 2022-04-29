@@ -237,6 +237,26 @@ impl<
     pub fn state(&self, index: usize) -> KeyState<CSIZE, SCAN_PERIOD_US, DEBOUNCE_US, IDLE_MS> {
         self.state_matrix[index]
     }
+
+    /// Generate event from KeyState
+    /// Useful when trying to determine if a key has not been pressed
+    pub fn generate_event(&self, index: usize) -> KeyEvent {
+        let state = self.state_matrix[index];
+
+        match state.state().0 {
+            State::On => {
+                KeyEvent::On {
+                    cycles_since_state_change: state.cycles_since_state_change()
+                }
+            }
+            State::Off => {
+                KeyEvent::Off {
+                    idle: state.idle(),
+                    cycles_since_state_change: state.cycles_since_state_change()
+                }
+            }
+        }
+    }
 }
 
 #[cfg(feature = "kll-core")]
@@ -257,7 +277,11 @@ mod converters {
                             last_state: 0,
                         }
                     } else {
-                        kll_core::TriggerEvent::None
+                        kll_core::TriggerEvent::Switch {
+                            state: kll_core::trigger::Phro::Hold,
+                            index: index as u16,
+                            last_state: *cycles_since_state_change,
+                        }
                     }
                 }
                 KeyEvent::Off {
@@ -272,7 +296,11 @@ mod converters {
                             last_state: 0,
                         }
                     } else {
-                        kll_core::TriggerEvent::None
+                        kll_core::TriggerEvent::Switch {
+                            state: kll_core::trigger::Phro::Off,
+                            index: index as u16,
+                            last_state: *cycles_since_state_change,
+                        }
                     }
                 }
             }
