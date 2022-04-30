@@ -857,6 +857,7 @@ impl<
                 }
                 HidIoParseError::VecAddFailed => HidioStatus::ErrorDecodeVecAddFailed,
                 HidIoParseError::VecResizeFailed => HidioStatus::ErrorDecodeVecResizeFailed,
+                _ => todo!(),
             },
             _ => HidioStatus::ErrorUnknown,
         }
