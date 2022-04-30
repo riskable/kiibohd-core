@@ -244,17 +244,13 @@ impl<
         let state = self.state_matrix[index];
 
         match state.state().0 {
-            State::On => {
-                KeyEvent::On {
-                    cycles_since_state_change: state.cycles_since_state_change()
-                }
-            }
-            State::Off => {
-                KeyEvent::Off {
-                    idle: state.idle(),
-                    cycles_since_state_change: state.cycles_since_state_change()
-                }
-            }
+            State::On => KeyEvent::On {
+                cycles_since_state_change: state.cycles_since_state_change(),
+            },
+            State::Off => KeyEvent::Off {
+                idle: state.idle(),
+                cycles_since_state_change: state.cycles_since_state_change(),
+            },
         }
     }
 }

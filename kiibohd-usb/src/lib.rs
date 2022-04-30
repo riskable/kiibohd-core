@@ -621,8 +621,7 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
                 Err(e) => {
                     warn!(
                         "Failed to add packet to hidio rx buffer: {:?} -> {:?}",
-                        e,
-                        packet
+                        e, packet
                     );
                     break;
                 }
