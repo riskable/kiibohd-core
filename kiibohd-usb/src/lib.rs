@@ -10,6 +10,25 @@
 mod descriptor;
 mod test;
 
+#[cfg(any(
+    feature = "defmt-default",
+    feature = "defmt-trace",
+    feature = "defmt-debug",
+    feature = "defmt-info",
+    feature = "defmt-warn",
+    feature = "defmt-error"
+))]
+use defmt::{error, trace, warn};
+#[cfg(not(any(
+    feature = "defmt-default",
+    feature = "defmt-trace",
+    feature = "defmt-debug",
+    feature = "defmt-info",
+    feature = "defmt-warn",
+    feature = "defmt-error"
+)))]
+use log::{error, trace, warn};
+
 pub use crate::descriptor::{
     HidioReport, KeyboardNkroReport, MouseReport, SysCtrlConsumerCtrlReport,
 };
@@ -30,7 +49,8 @@ use heapless::Vec;
 #[cfg(feature = "hidio")]
 use kiibohd_hid_io::{CommandInterface, KiibohdCommandInterface};
 
-#[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+#[derive(Copy, Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "defmt-impl", derive(defmt::Format))]
 pub enum KeyState {
     /// Press the given USB HID Keyboard code
     Press(u8),
@@ -42,7 +62,8 @@ pub enum KeyState {
     Unknown,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+#[derive(Copy, Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "defmt-impl", derive(defmt::Format))]
 pub enum MouseState {
     /// Press the given mouse button (1->8)
     Press(u8),
@@ -60,7 +81,8 @@ pub enum MouseState {
     Unknown,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, defmt::Format)]
+#[derive(Copy, Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "defmt-impl", derive(defmt::Format))]
 pub enum CtrlState {
     /// Press the given USB HID System Ctrl code
     SystemCtrlPress(u8),
@@ -278,7 +300,7 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
     /// Dynamically update the keyboard protocol mode (and behavior)
     /// Used to force NKRO or 6KRO regardless of what the host configures
     pub fn set_kbd_protocol_mode(&mut self, mode: HidProtocolMode, config: ProtocolModeConfig) {
-        defmt::trace!(
+        trace!(
             "HidInterface::set_kbd_protocol_mode({:?}, {:?})",
             mode,
             config
@@ -339,7 +361,7 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
         //       0 in USB HID represents no keys pressed, so it's meaningless in a bitmask
         //       Ignore any keys over 231/0xE7
         if key == 0 || key > 0xE7 {
-            defmt::warn!("Invalid key for nkro_bit({}, {}), ignored.", key, press);
+            warn!("Invalid key for nkro_bit({}, {}), ignored.", key, press);
             return;
         }
 
@@ -436,13 +458,13 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
 
     fn push_6kro_kbd(&mut self) {
         if let Err(val) = self.kbd_6kro.push_input(&self.kbd_6kro_report) {
-            defmt::error!("6KRO Buffer Overflow: {:?}", val);
+            error!("6KRO Buffer Overflow: {:?}", val);
         }
     }
 
     fn push_nkro_kbd(&mut self) {
         if let Err(val) = self.kbd_nkro.push_input(&self.kbd_nkro_report) {
-            defmt::error!("NKRO Buffer Overflow: {:?}", val);
+            error!("NKRO Buffer Overflow: {:?}", val);
         }
     }
 
@@ -497,7 +519,7 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
         // Push report
         if updated {
             if let Err(val) = self.mouse.push_input(&self.mouse_report) {
-                defmt::error!("Mouse Buffer Overflow: {:?}", val);
+                error!("Mouse Buffer Overflow: {:?}", val);
             }
         }
 
@@ -538,7 +560,7 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
         // Push report
         if updated {
             if let Err(val) = self.ctrl.push_input(&self.ctrl_report) {
-                defmt::error!("Ctrl Buffer Overflow: {:?}", val);
+                error!("Ctrl Buffer Overflow: {:?}", val);
             }
         }
     }
@@ -589,7 +611,7 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
             match self.hidio.pull_raw_output(&mut packet) {
                 Ok(size) => {
                     packet.truncate(size);
-                    defmt::trace!("rx packet: {}", packet);
+                    trace!("rx packet: {:?}", packet);
                     interface.rx_bytebuf.enqueue(packet).unwrap();
                 }
                 Err(UsbError::WouldBlock) => {
@@ -597,8 +619,8 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
                     break;
                 }
                 Err(e) => {
-                    defmt::warn!(
-                        "Failed to add packet to hidio rx buffer: {} -> {}",
+                    warn!(
+                        "Failed to add packet to hidio rx buffer: {:?} -> {:?}",
                         e,
                         packet
                     );
@@ -609,14 +631,14 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
 
         // Process rx buffer
         if let Err(e) = interface.process_rx(0) {
-            defmt::warn!("process_rx failed -> {}", e);
+            warn!("process_rx failed -> {:?}", e);
         }
 
         // Push as many packets as possible
         while !interface.tx_bytebuf.is_empty() {
             // Don't dequeue yet, we might not be able to send
             let packet = interface.tx_bytebuf.peek().unwrap();
-            defmt::trace!("tx packet: {}", packet);
+            trace!("tx packet: {:?}", packet);
 
             // Attempt to push
             match self.hidio.push_raw_input(packet) {
@@ -629,7 +651,7 @@ impl<B: UsbBus, const KBD_SIZE: usize, const MOUSE_SIZE: usize, const CTRL_SIZE:
                     break;
                 }
                 Err(e) => {
-                    defmt::warn!("Failed to push hidio tx packet: {} -> {}", e, packet);
+                    warn!("Failed to push hidio tx packet: {:?} -> {:?}", e, packet);
                     break;
                 }
             }
@@ -660,7 +682,7 @@ pub fn enqueue_keyboard_event<const KBD_SIZE: usize>(
             _ => Ok(()),
         },
         _ => {
-            defmt::error!("Unknown CapabilityRun for Keyboard: {:?}", cap_run);
+            error!("Unknown CapabilityRun for Keyboard: {:?}", cap_run);
             Err(KeyState::Unknown)
         }
     }
@@ -691,7 +713,7 @@ pub fn enqueue_ctrl_event<const CTRL_SIZE: usize>(
             _ => Ok(()),
         },
         _ => {
-            defmt::error!(
+            error!(
                 "Unknown CapabilityRun for Consumer/System Control: {:?}",
                 cap_run
             );

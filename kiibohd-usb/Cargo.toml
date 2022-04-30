@@ -10,12 +10,13 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/kiibohd/kiibohd-core"
 
 [dependencies]
-defmt = "0.3"
+defmt = { version = "0.3", optional = true }
 heapless = { version = "^0.7.10", features = ["defmt-impl"] }
 kiibohd-hid-io = { version = "0.1.0", path = "../kiibohd-hid-io", optional = true }
 kll-core = { version = "0.1.0", path = "../kll-core", optional = true }
-usb-device = { version = "0.2.9", git = "https://github.com/haata/usb-device.git", features = ["defmt-impl"] }
-usbd-hid = { version = "0.5.3", git = "https://github.com/haata/usbd-hid.git", features = ["defmt-impl"] }
+log = { version = "^0.4", default-features = false }
+usb-device = { version = "0.2.8", git = "https://github.com/haata/usb-device.git" }
+usbd-hid = { version = "0.6.0", git = "https://github.com/haata/usbd-hid.git" }
 
 [dev-dependencies]
 libc-print = "0.1.16"
@@ -31,12 +32,15 @@ hidio = ["kiibohd-hid-io"]
 mouse = []
 
 # Defmt logging disabled by default
-defmt-default = []
-defmt-trace = []
-defmt-debug = []
-defmt-info = []
-defmt-warn = []
-defmt-error = []
+defmt-default = ["defmt", "defmt-impl"]
+defmt-trace = ["defmt", "defmt-impl"]
+defmt-debug = ["defmt", "defmt-impl"]
+defmt-info = ["defmt", "defmt-impl"]
+defmt-warn = ["defmt", "defmt-impl"]
+defmt-error = ["defmt", "defmt-impl"]
+
+#defmt-impl = ["usb-device/defmt-impl", "usbd-hid/defmt-impl"]
+defmt-impl = []
 
 # kll-core Capability Event enqueuing support
 kll-core = ["dep:kll-core"]
