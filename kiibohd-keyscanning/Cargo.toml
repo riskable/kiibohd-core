@@ -13,7 +13,7 @@ repository = "https://github.com/kiibohd/kiibohd-core"
 defmt           = "0.3"
 embedded-hal    = { version = "0.2.7", features = ["unproven"] }
 heapless        = "^0.7.10"
-kll-core        = { path = "../kll-core", optional = true }
+kll-core        = { version = "0.1.0", path = "../kll-core", optional = true }
 
 [features]
 
