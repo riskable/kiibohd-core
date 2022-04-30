@@ -5,13 +5,13 @@ authors = ["Smasher816 <Smasher816@gmail.com>", "Jacob Alexander <haata@kiibohd.
 license = "MIT OR Apache-2.0"
 edition = "2021"
 description = "KLL (Keyboard Layout Language) Compiler - Rust Edition"
-
+repository = "https://github.com/kiibohd/kiibohd-core"
 
 [dependencies]
 alphanumeric-sort   = "1.4"
 derive-object-merge = "0.1.0-alpha1"
 enum-utils          = "0.1"
-kll-core            = { path = "../kll-core" }
+kll-core            = { version = "0.1.0", path = "../kll-core" }
 layouts-rs          = "0.1.0"
 log                 = { version = "^0.4" }
 object-merge        = "0.1.0-alpha1"

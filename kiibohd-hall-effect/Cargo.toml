@@ -4,7 +4,8 @@ version       = "0.1.0"
 authors       = ["Jacob Alexander <haata@kiibohd.com>"]
 license       = "MIT OR Apache-2.0"
 edition       = "2021"
-
+repository    = "https://github.com/kiibohd/kiibohd-core"
+description   = "Analysis crate for intepreting hall-effect keyboard switches (e.g. Silo Switches)"
 
 [lib]
 name = "kiibohd_hall_effect"

@@ -5,6 +5,7 @@ authors = ["Jacob Alexander <haata@kiibohd.com>"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
 description = "KLL state-machine implementation focused on no_std embedded/bare-metal targets"
+repository = "https://github.com/kiibohd/kiibohd-core"
 
 [features]
 default = ["std"]

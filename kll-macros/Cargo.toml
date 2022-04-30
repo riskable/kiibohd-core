@@ -5,6 +5,7 @@ authors = ["Jacob Alexander <haata@kiibohd.com>"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
 description = "Rust macros for kll-core"
+repository = "https://github.com/kiibohd/kiibohd-core"
 
 [lib]
 proc-macro = true

@@ -4,9 +4,11 @@ version = "0.1.0"
 authors = ["Jacob Alexander <haata@kiibohd.com>"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
+description = "Hall Effect keyscanning for strobed matrices"
+repository = "https://github.com/kiibohd/kiibohd-core"
 
 [dependencies]
-kiibohd-hall-effect = { path = "../kiibohd-hall-effect" }
+kiibohd-hall-effect = { version = "0.1.0", path = "../kiibohd-hall-effect" }
 generic-array   = "0.14.4"
 embedded-hal    = "0.2.7"
 embedded-time   = "0.10.1"
