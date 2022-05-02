@@ -471,6 +471,33 @@ impl<
         &self.off_state_lookups
     }
 
+    /// Process off state lookups
+    /// To maintain state use a callback function to evaluate input off states
+    pub fn process_off_state_lookups<const MAX_LAYER_LOOKUP_SIZE: usize>(
+        &mut self,
+        generate_event: &dyn Fn(usize) -> TriggerEvent,
+    ) {
+        let mut events: heapless::Vec<TriggerEvent, MAX_LAYER_LOOKUP_SIZE> = heapless::Vec::new();
+        for lookup in &self.off_state_lookups {
+            // TODO support non-keyboard TriggerConditions
+            assert!(
+                lookup.1 == 1,
+                "Currently only keyboard TriggerConditions are supported"
+            );
+            events.push(generate_event(lookup.2.into())).unwrap();
+        }
+
+        for event in events {
+            let ret = self.process_trigger::<MAX_LAYER_LOOKUP_SIZE>(event);
+            assert!(
+                ret.is_ok(),
+                "Failed to enqueue offstate: {:?} - {:?}",
+                event,
+                ret
+            );
+        }
+    }
+
     /// Finalize incoming triggers, update internal state and generate outgoing results
     pub fn finalize_triggers<const LSIZE: usize>(&mut self) -> heapless::Vec<CapabilityRun, LSIZE> {
         let mut results = heapless::Vec::<_, LSIZE>::new();
