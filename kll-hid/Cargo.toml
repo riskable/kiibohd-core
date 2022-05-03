@@ -7,6 +7,8 @@ edition = "2021"
 readme = "README.md"
 description = "USB HID enum mapping for kll-core"
 repository = "https://github.com/kiibohd/kiibohd-core"
+keywords = ["no-std", "usb", "hid", "embedded"]
+categories = ["embedded", "no-std"]
 
 [dependencies]
 defmt = "0.3"
