@@ -6,6 +6,7 @@ license       = "MIT OR Apache-2.0"
 edition       = "2021"
 description   = "FFI package for kiibohd-core"
 repository    = "https://github.com/kiibohd/kiibohd-core"
+categories    = ["no-std", "embedded"]
 
 
 [lib]

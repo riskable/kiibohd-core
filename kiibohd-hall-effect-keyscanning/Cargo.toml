@@ -6,6 +6,7 @@ license = "MIT OR Apache-2.0"
 edition = "2021"
 description = "Hall Effect keyscanning for strobed matrices"
 repository = "https://github.com/kiibohd/kiibohd-core"
+categories = ["no-std", "embedded", "hardware-support"]
 
 [dependencies]
 kiibohd-hall-effect = { version = "0.1.0", path = "../kiibohd-hall-effect" }
